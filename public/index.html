@@ -1,0 +1,405 @@
+
+
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>CMDA-UUTH Rural Outreach 2026</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap"
+    rel="stylesheet"
+  >
+
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+  <main>
+
+    <!-- INTRO -->
+    <section class="intro">
+
+      <div class="intro-overlay"></div>
+
+      <div class="intro-content">
+
+        <div class="intro-label">
+          CMDA-UUTH CHAPTER
+        </div>
+
+        <h1>
+          Rural Outreach
+          <span>2026</span>
+        </h1>
+
+        <div class="intro-line"></div>
+
+        <p class="tagline">
+          Serve. Learn. Make a Difference.
+        </p>
+
+        <p class="intro-text">
+          We’re looking forward to serving, learning, and making a real
+          difference in the lives we’ll touch.
+        </p>
+
+        <a href="#registration" class="primary-button">
+          Begin Registration
+          <span>→</span>
+        </a>
+
+        <div class="intro-meta">
+          <span>14 Sept – 11 Oct 2026</span>
+          <span>•</span>
+          <span>Registration Fee ₦3,800</span>
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- REGISTRATION -->
+    <section class="registration" id="registration">
+
+      <div class="section-heading">
+
+        <div class="section-number">01</div>
+
+        <div>
+          <p class="eyebrow">PARTICIPANT DETAILS</p>
+
+          <h2>Let’s get you registered.</h2>
+
+          <p>
+            Tell us a little about yourself to get started.
+          </p>
+        </div>
+
+      </div>
+
+
+      <div class="registration-card">
+
+        <form id="registrationForm">
+
+          <!-- PERSONAL INFORMATION -->
+          <div class="form-section">
+
+            <div class="form-section-title">
+              <span>01</span>
+              Personal Information
+            </div>
+
+            <div class="field">
+              <label for="fullName">Full Name</label>
+
+              <input
+                type="text"
+                id="fullName"
+                name="fullName"
+                placeholder="Enter your full name"
+                required
+              >
+            </div>
+
+
+            <div class="two-column">
+
+              <div class="field">
+                <label for="phone">Phone Number</label>
+
+                <input
+                  type="tel"
+                  id="phone"
+                  name="phone"
+                  placeholder="08012345678"
+                  required
+                >
+              </div>
+
+
+              <div class="field">
+                <label for="gender">Gender</label>
+
+                <select id="gender" name="gender" required>
+                  <option value="">Select</option>
+                  <option value="Female">Female</option>
+                  <option value="Male">Male</option>
+                </select>
+              </div>
+
+            </div>
+
+
+            <div class="field">
+              <label for="email">Email Address</label>
+
+              <input
+                type="email"
+                id="email"
+                name="email"
+                placeholder="you@example.com"
+                required
+              >
+            </div>
+
+          </div>
+
+
+          <!-- ACADEMIC INFORMATION -->
+          <div class="form-section">
+
+            <div class="form-section-title">
+              <span>02</span>
+              Academic Information
+            </div>
+
+            <div class="two-column">
+
+              <div class="field">
+                <label for="level">Current Level</label>
+
+                <select id="level" name="level" required>
+                  <option value="">Select level</option>
+                  <option value="100">100 Level</option>
+                  <option value="200">200 Level</option>
+                  <option value="300">300 Level</option>
+                  <option value="400">400 Level</option>
+                  <option value="500">500 Level</option>
+                  <option value="600">600 Level</option>
+                  <option value="Intern">Intern</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+
+              <div class="field">
+                <label for="faculty">Faculty</label>
+
+                <input
+                  type="text"
+                  id="faculty"
+                  name="faculty"
+                  placeholder="Your faculty"
+                  required
+                >
+              </div>
+
+            </div>
+
+
+            <div class="field">
+              <label for="department">Department</label>
+
+              <input
+                type="text"
+                id="department"
+                name="department"
+                placeholder="Your department"
+                required
+              >
+            </div>
+
+          </div>
+
+
+          <!-- OUTREACH INFORMATION -->
+          <div class="form-section">
+
+            <div class="form-section-title">
+              <span>03</span>
+              Outreach Information
+            </div>
+
+            <div class="field">
+              <label for="cmda">Are you a member of CMDA?</label>
+
+              <select id="cmda" name="cmda" required>
+                <option value="">Select</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="previousOutreach">
+                Have you attended any CMDA Rural Outreach before?
+              </label>
+
+              <select id="previousOutreach" name="previousOutreach" required>
+                <option value="">Select</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="fourDayStay">
+                Are you willing to stay in the rural community for the full duration of the four-day outreach?
+              </label>
+
+              <select id="fourDayStay" name="fourDayStay" required>
+                <option value="">Select</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="unit">
+                Choose your outreach unit
+              </label>
+
+              <p class="field-description">
+                Select <strong>one</strong> unit. You will serve in your
+                selected unit throughout the outreach.
+              </p>
+
+              <select id="unit" name="unit" required>
+                <option value="">Select one unit</option>
+                <option value="Organizing">Organizing</option>
+                <option value="Registration">Registration</option>
+                <option value="Protocol/Security">Protocol / Security</option>
+                <option value="Welfare">Welfare</option>
+                <option value="Counselling">Counselling</option>
+                <option value="Vital Signs">Vital Signs</option>
+                <option value="Laboratory">Laboratory</option>
+                <option value="Pharmacy">Pharmacy</option>
+                <option value="Surgery">Surgery</option>
+                <option value="Media/Publicity">Media / Publicity</option>
+                <option value="Accommodation/Sanitation">Accommodation / Sanitation</option>
+                <option value="Technical">Technical</option>
+                <option value="Transportation">Transportation</option>
+              </select>
+            </div>
+
+            <div class="unit-note">
+              <div class="unit-note-icon">i</div>
+
+              <p>
+                Please choose carefully. Each participant can register for
+                only one unit and will remain with that unit throughout the
+                outreach.
+              </p>
+            </div>
+
+          </div>
+
+
+          <!-- PAYMENT -->
+          <div class="payment-preview">
+
+            <div>
+              <p class="payment-label">
+                REGISTRATION FEE
+              </p>
+
+              <h3>₦3,800</h3>
+
+              <p>
+                Pay ₦3,800 to complete your registration.
+              </p>
+            </div>
+
+            <div class="payment-arrow">
+              →
+            </div>
+
+          </div>
+
+
+          <button
+            type="submit"
+            class="submit-button"
+          >
+            Pay Registration Fee
+          </button>
+
+          <p class="form-note">
+            You’ll be redirected to Paystack to complete your payment.
+          </p>
+
+        </form>
+
+      </div>
+
+    </section>
+
+
+    <!-- PAYMENT / SUCCESS AREA -->
+    <section class="success-section" id="success">
+
+      <div class="success-card">
+
+        <div class="success-mark">
+          ✓
+        </div>
+
+        <p class="eyebrow">
+          REGISTRATION COMPLETE
+        </p>
+
+        <h2>
+          You’re officially on board.
+        </h2>
+
+        <p>
+          Thank you for registering for the CMDA-UUTH Rural Outreach 2026.
+          We look forward to serving, learning and making a difference
+          together.
+        </p>
+
+        <a
+          href="#"
+          class="whatsapp-button"
+          id="whatsappButton"
+        >
+          Join the WhatsApp Group
+          <span>→</span>
+        </a>
+
+      </div>
+
+    </section>
+
+
+    <!-- FOOTER -->
+    <footer>
+
+      <div class="footer-inner">
+
+        <div>
+          <strong>CMDA-UUTH</strong>
+          <span>Rural Outreach 2026</span>
+        </div>
+
+        <p>
+          Registration closes 11 October 2026.
+        </p>
+
+      </div>
+
+    </footer>
+
+  </main>
+
+
+  <script src="app.js"></script>
+
+</body>
+</html>
+
+
+
+
