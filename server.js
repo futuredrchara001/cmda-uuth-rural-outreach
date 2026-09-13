@@ -15,7 +15,7 @@ const {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const REGISTRATION_AMOUNT = 380000; // ₦3,800 in kobo
+const REGISTRATION_AMOUNT = 380000;
 
 const mailer =
   process.env.SMTP_USER && process.env.SMTP_PASS
@@ -45,13 +45,15 @@ Name: ${registration.fullName}
 Phone: ${registration.phone}
 Email: ${registration.email}
 Gender: ${registration.gender}
+
+Institution: ${registration.institution}
 Level: ${registration.level}
 Faculty: ${registration.faculty}
 Department: ${registration.department}
-Unit: ${registration.unit}
+
 CMDA Member: ${registration.cmda}
 Previous Rural Outreach: ${registration.previousOutreach}
-Four-Day Stay: ${registration.fourDayStay}
+Unit: ${registration.unit}
 
 Registration Fee: ₦3,800
 Payment Reference: ${registration.reference}
@@ -63,10 +65,13 @@ Paid At: ${payment.paid_at || new Date().toISOString()}
 }
 
 async function completePayment(reference, payment) {
-  const registration = findByReference(reference);
+  const registration = await findByReference(reference);
 
   if (!registration) {
-    return { success: false, reason: "registration_not_found" };
+    return {
+      success: false,
+      reason: "registration_not_found"
+    };
   }
 
   if (
@@ -76,51 +81,74 @@ async function completePayment(reference, payment) {
     payment.currency !== "NGN" ||
     payment.customer?.email?.toLowerCase() !== registration.email
   ) {
-    return { success: false, reason: "payment_validation_failed" };
+    return {
+      success: false,
+      reason: "payment_validation_failed"
+    };
   }
 
   if (registration.paymentStatus === "success") {
-    return { success: true, registration, alreadyCompleted: true };
+    return {
+      success: true,
+      registration,
+      alreadyCompleted: true
+    };
   }
 
-  const updated = updateRegistration(registration.id, {
+  const updated = await updateRegistration(registration.id, {
     paymentStatus: "success",
     paidAt: payment.paid_at || new Date().toISOString(),
     paymentChannel: payment.channel || null,
-    paystackTransactionId: payment.id
+    paystackTransactionId: payment.id,
+    paymentReference: payment.reference,
+    paymentAmount: payment.amount,
+    paymentCurrency: payment.currency
   });
 
   try {
     await sendRegistrationEmail(updated, payment);
   } catch (error) {
-    console.error("Notification email failed:", error.message);
+    console.error(
+      "Notification email failed:",
+      error.message
+    );
   }
 
-  return { success: true, registration: updated };
+  return {
+    success: true,
+    registration: updated
+  };
 }
 
-/*
-  Capture the raw request body so the Paystack webhook
-  signature can be verified.
-*/
-app.use(express.json({
-  verify: (req, res, buf) => {
-    req.rawBody = buf;
-  }
-}));
+app.use(
+  express.json({
+    verify: (req, res, buf) => {
+      req.rawBody = buf;
+    }
+  })
+);
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
-app.get("/api/registration-status", (req, res) => {
-  res.json({
-    open: !hasReachedLimit()
-  });
+app.get("/api/registration-status", async (req, res) => {
+  try {
+    res.json({
+      open: !(await hasReachedLimit())
+    });
+  } catch (error) {
+    console.error("Registration status error:", error.message);
+
+    res.status(500).json({
+      open: false,
+      message: "Registration status unavailable."
+    });
+  }
 });
 
 app.post("/api/register", async (req, res) => {
   try {
-    if (hasReachedLimit()) {
+    if (await hasReachedLimit()) {
       return res.status(403).json({
         success: false,
         message: "Registration is currently closed."
@@ -132,13 +160,13 @@ app.post("/api/register", async (req, res) => {
       phone,
       email,
       gender,
+      institution,
       level,
       faculty,
       department,
-      unit,
       cmda,
       previousOutreach,
-      fourDayStay
+      unit
     } = req.body;
 
     if (
@@ -146,19 +174,20 @@ app.post("/api/register", async (req, res) => {
       !phone ||
       !email ||
       !gender ||
+      !institution ||
       !level ||
       !faculty ||
       !department ||
-      !unit ||
       !cmda ||
       !previousOutreach ||
-      !fourDayStay
+      !unit
     ) {
       return res.status(400).json({
         success: false,
         message: "Please complete all required fields."
       });
     }
+
 
     if (!process.env.PAYSTACK_SECRET_KEY) {
       return res.status(500).json({
@@ -173,22 +202,21 @@ app.post("/api/register", async (req, res) => {
       phone: phone.trim(),
       email: email.trim().toLowerCase(),
       gender,
+      institution: institution.trim(),
       level,
       faculty: faculty.trim(),
       department: department.trim(),
-      unit,
       cmda,
       previousOutreach,
-      fourDayStay,
-      amount: 3800,
+      unit,
       paymentStatus: "pending",
       reference: null,
       createdAt: new Date().toISOString()
     };
 
-    addRegistration(registration);
+    const savedRegistration = await addRegistration(registration);
 
-    const reference = `CMDA-${registration.id}`;
+    const reference = `CMDA-${savedRegistration.id}`;
 
     const callbackUrl = process.env.APP_URL
       ? `${process.env.APP_URL}/payment/callback`
@@ -197,32 +225,35 @@ app.post("/api/register", async (req, res) => {
     const response = await axios.post(
       "https://api.paystack.co/transaction/initialize",
       {
-        email: registration.email,
+        email: savedRegistration.email,
         amount: REGISTRATION_AMOUNT,
         currency: "NGN",
         reference,
         callback_url: callbackUrl,
         metadata: {
-          registration_id: registration.id,
-          full_name: registration.fullName,
-          unit: registration.unit
+          registration_id: savedRegistration.id,
+          full_name: savedRegistration.fullName,
+          institution: savedRegistration.institution,
+          unit: savedRegistration.unit
         }
       },
       {
         headers: {
-          Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+          Authorization:
+            `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
           "Content-Type": "application/json"
         }
       }
     );
 
-    updateRegistration(registration.id, {
+    await updateRegistration(savedRegistration.id, {
       reference
     });
 
     res.json({
       success: true,
-      authorizationUrl: response.data.data.authorization_url
+      authorizationUrl:
+        response.data.data.authorization_url
     });
 
   } catch (error) {
@@ -233,24 +264,26 @@ app.post("/api/register", async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: "Unable to start payment. Please try again."
+      message:
+        "Unable to start payment. Please try again."
     });
   }
 });
 
-/*
-  Paystack webhook.
-*/
 app.post("/api/paystack/webhook", async (req, res) => {
   try {
-    const signature = req.headers["x-paystack-signature"];
+    const signature =
+      req.headers["x-paystack-signature"];
 
     if (!signature || !req.rawBody) {
       return res.sendStatus(401);
     }
 
     const expectedSignature = crypto
-      .createHmac("sha512", process.env.PAYSTACK_SECRET_KEY)
+      .createHmac(
+        "sha512",
+        process.env.PAYSTACK_SECRET_KEY
+      )
       .update(req.rawBody)
       .digest("hex");
 
@@ -271,12 +304,18 @@ app.post("/api/paystack/webhook", async (req, res) => {
       const reference = event.data?.reference;
 
       if (reference) {
-        await completePayment(reference, event.data);
+        await completePayment(
+          reference,
+          event.data
+        );
       }
     }
 
   } catch (error) {
-    console.error("Webhook error:", error.message);
+    console.error(
+      "Webhook error:",
+      error.message
+    );
 
     if (!res.headersSent) {
       res.sendStatus(500);
@@ -284,28 +323,31 @@ app.post("/api/paystack/webhook", async (req, res) => {
   }
 });
 
-/*
-  Backup callback verification.
-*/
 app.get("/payment/callback", async (req, res) => {
   try {
     const reference = req.query.reference;
 
     if (!reference) {
-      return res.status(400).send("Payment reference missing.");
+      return res
+        .status(400)
+        .send("Payment reference missing.");
     }
 
-    const registration = findByReference(reference);
+    const registration =
+      await findByReference(reference);
 
     if (!registration) {
-      return res.status(404).send("Registration not found.");
+      return res
+        .status(404)
+        .send("Registration not found.");
     }
 
     const response = await axios.get(
       `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
       {
         headers: {
-          Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`
+          Authorization:
+            `Bearer ${process.env.PAYSTACK_SECRET_KEY}`
         }
       }
     );
@@ -325,11 +367,20 @@ app.get("/payment/callback", async (req, res) => {
     const whatsappLink =
       process.env.WHATSAPP_GROUP_LINK || "#";
 
+    const safeName =
+      registration.fullName
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
     res.send(`
       <!DOCTYPE html>
       <html>
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="viewport"
+          content="width=device-width, initial-scale=1">
         <title>Registration Complete</title>
         <style>
           body {
@@ -343,6 +394,7 @@ app.get("/payment/callback", async (req, res) => {
             padding: 24px;
             box-sizing: border-box;
           }
+
           .card {
             max-width: 480px;
             width: 100%;
@@ -350,10 +402,18 @@ app.get("/payment/callback", async (req, res) => {
             padding: 40px 28px;
             border-radius: 24px;
             text-align: center;
-            box-shadow: 0 12px 40px rgba(56,36,45,.12);
+            box-shadow:
+              0 12px 40px rgba(56,36,45,.12);
           }
-          h1 { margin-bottom: 12px; }
-          p { line-height: 1.6; }
+
+          h1 {
+            margin-bottom: 12px;
+          }
+
+          p {
+            line-height: 1.6;
+          }
+
           a {
             display: inline-block;
             margin-top: 20px;
@@ -366,15 +426,21 @@ app.get("/payment/callback", async (req, res) => {
           }
         </style>
       </head>
+
       <body>
         <div class="card">
           <h1>Registration Complete</h1>
+
           <p>
-            Thank you, ${registration.fullName.replace(/</g, "&lt;")}.
-            Your CMDA-UUTH Rural Outreach 2026 registration and payment
-            have been successfully confirmed.
+            Thank you, ${safeName}.
+            Your CMDA-UUTH Rural Outreach 2026
+            registration and payment have been
+            successfully confirmed.
           </p>
-          <a href="${whatsappLink}">Join the WhatsApp Group</a>
+
+          <a href="${whatsappLink}">
+            Join the WhatsApp Group
+          </a>
         </div>
       </body>
       </html>
@@ -388,11 +454,16 @@ app.get("/payment/callback", async (req, res) => {
 
     res.status(500).send(`
       <h1>We could not confirm your payment yet.</h1>
-      <p>If you were charged, please contact the outreach team.</p>
+      <p>
+        If you were charged, please contact
+        the outreach team.
+      </p>
     `);
   }
 });
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`CMDA Outreach site running at http://localhost:${PORT}`);
+  console.log(
+    `CMDA Outreach site running at http://localhost:${PORT}`
+  );
 });
