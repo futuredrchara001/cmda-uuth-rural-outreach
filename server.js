@@ -129,7 +129,8 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, "public-static")));
+app.use("/registration", express.static(path.join(__dirname, "public")));
 
 app.get("/api/registration-status", async (req, res) => {
   try {
