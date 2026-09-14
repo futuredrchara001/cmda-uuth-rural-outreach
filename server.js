@@ -8,9 +8,11 @@ const nodemailer = require("nodemailer");
 
 const {
   hasReachedLimit,
+  hasReachedUnitLimit,
   addRegistration,
   findByReference,
-  updateRegistration
+  updateRegistration,
+  clearAllRegistrations
 } = require("./registration-store");
 
 const app = express();
@@ -28,15 +30,24 @@ const mailer =
       })
     : null;
 
-async function sendRegistrationEmail(registration, payment) {
-  if (!mailer || !process.env.NOTIFICATION_EMAIL) {
-    console.log("Email notification skipped: SMTP not configured.");
+async function sendAdminRegistrationEmail(registration, payment) {
+  const recipients = process.env.NOTIFICATION_EMAILS
+    ? process.env.NOTIFICATION_EMAILS
+        .split(",")
+        .map(email => email.trim())
+        .filter(Boolean)
+    : process.env.NOTIFICATION_EMAIL
+      ? [process.env.NOTIFICATION_EMAIL]
+      : [];
+
+  if (!mailer || recipients.length === 0) {
+    console.log("Admin email notification skipped: SMTP not configured.");
     return;
   }
 
   await mailer.sendMail({
     from: `"CMDA-UUTH Rural Outreach" <${process.env.SMTP_USER}>`,
-    to: process.env.NOTIFICATION_EMAIL,
+    to: recipients,
     subject: `New Paid Registration — ${registration.fullName}`,
     text: `
 A new CMDA-UUTH Rural Outreach 2026 registration has been successfully paid.
@@ -60,6 +71,44 @@ Payment Reference: ${registration.reference}
 Payment Channel: ${payment.channel || "N/A"}
 Payment Status: SUCCESS
 Paid At: ${payment.paid_at || new Date().toISOString()}
+`
+  });
+}
+
+async function sendParticipantConfirmationEmail(registration, payment) {
+  if (!mailer || !registration.email) {
+    console.log("Participant confirmation email skipped: SMTP not configured.");
+    return;
+  }
+
+  await mailer.sendMail({
+    from: `"CMDA-UUTH Rural Outreach" <${process.env.SMTP_USER}>`,
+    to: registration.email,
+    subject: "CMDA-UUTH Rural Outreach 2026 — Registration Successful",
+    text: `
+Dear ${registration.fullName},
+
+Your registration for the CMDA-UUTH Chapter Rural Outreach 2026 has been successfully completed.
+
+Registration details:
+
+Name: ${registration.fullName}
+Unit: ${registration.unit}
+Institution: ${registration.institution}
+Level: ${registration.level}
+
+Payment: ₦3,800
+Payment Reference: ${registration.reference}
+Payment Status: SUCCESS
+Paid At: ${payment.paid_at || new Date().toISOString()}
+
+Your payment has been successfully verified by Paystack, and your registration is confirmed.
+
+Please keep this email for your records.
+
+Thank you,
+CMDA-UUTH Chapter
+Rural Outreach 2026
 `
   });
 }
@@ -106,10 +155,13 @@ async function completePayment(reference, payment) {
   });
 
   try {
-    await sendRegistrationEmail(updated, payment);
+    await Promise.all([
+      sendAdminRegistrationEmail(updated, payment),
+      sendParticipantConfirmationEmail(updated, payment)
+    ]);
   } catch (error) {
     console.error(
-      "Notification email failed:",
+      "Registration notification email failed:",
       error.message
     );
   }
@@ -129,13 +181,21 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: true }));
+
+// Public landing page
 app.use(express.static(path.join(__dirname, "public-static")));
+
+// Registration form
 app.use("/registration", express.static(path.join(__dirname, "public")));
+
+app.get("/admin", requireAdmin, (req, res) => {
+  res.sendFile(path.join(__dirname, "private-admin", "index.html"));
+});
 
 app.get("/api/registration-status", async (req, res) => {
   try {
     res.json({
-      open: !(await hasReachedLimit())
+      open: !(await hasReachedLimit()).reached
     });
   } catch (error) {
     console.error("Registration status error:", error.message);
@@ -147,9 +207,120 @@ app.get("/api/registration-status", async (req, res) => {
   }
 });
 
+
+
+function requireAdmin(req, res, next) {
+  const auth = req.headers.authorization || "";
+
+  if (!auth.startsWith("Basic ")) {
+    res.set("WWW-Authenticate", 'Basic realm="CMDA Outreach Admin"');
+    return res.status(401).send("Admin login required.");
+  }
+
+  const decoded = Buffer.from(auth.slice(6), "base64").toString("utf8");
+  const separator = decoded.indexOf(":");
+
+  if (separator === -1) {
+    res.set("WWW-Authenticate", 'Basic realm="CMDA Outreach Admin"');
+    return res.status(401).send("Invalid admin credentials.");
+  }
+
+  const username = decoded.slice(0, separator);
+  const password = decoded.slice(separator + 1);
+
+  if (
+    username !== process.env.ADMIN_USERNAME ||
+    password !== process.env.ADMIN_PASSWORD
+  ) {
+    res.set("WWW-Authenticate", 'Basic realm="CMDA Outreach Admin"');
+    return res.status(401).send("Invalid admin credentials.");
+  }
+
+  next();
+}
+
+app.post("/api/admin/reset", requireAdmin, async (req, res) => {
+  try {
+    await clearAllRegistrations();
+
+    res.json({
+      success: true,
+      message: "All registration records have been cleared."
+    });
+  } catch (error) {
+    console.error("Admin reset error:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Unable to clear registration records."
+    });
+  }
+});
+
+app.get("/api/admin/stats", requireAdmin, async (req, res) => {
+  try {
+    const {
+      MAX_REGISTRATIONS,
+      UNIT_LIMITS,
+      getSuccessfulRegistrations,
+      hasReachedLimit,
+      clearAllRegistrations
+    } = require("./registration-store");
+
+    const registrations = await getSuccessfulRegistrations();
+    const overall = await hasReachedLimit();
+
+    const units = {};
+
+    for (const [unit, limit] of Object.entries(UNIT_LIMITS)) {
+      const members = registrations
+        .filter(registration => registration.unit === unit)
+        .map(registration => ({
+          name: registration.fullName,
+          department: registration.department,
+          level: registration.level
+        }));
+
+      const count = members.length;
+      const remaining = Math.max(limit - count, 0);
+
+      units[unit] = {
+        count,
+        limit,
+        remaining,
+        warning: remaining > 0 && remaining <= 3,
+        full: remaining === 0,
+        members
+      };
+    }
+
+    res.json({
+      success: true,
+      overall: {
+        count: overall.count,
+        limit: MAX_REGISTRATIONS,
+        remaining: overall.remaining,
+        warning:
+          overall.remaining > 0 &&
+          overall.remaining <= 3,
+        full: overall.remaining === 0
+      },
+      units,
+      updatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error("Admin stats error:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Unable to load registration statistics."
+    });
+  }
+});
+
 app.post("/api/register", async (req, res) => {
   try {
-    if (await hasReachedLimit()) {
+    if ((await hasReachedLimit()).reached) {
       return res.status(403).json({
         success: false,
         message: "Registration is currently closed."
@@ -189,6 +360,15 @@ app.post("/api/register", async (req, res) => {
       });
     }
 
+
+    const unitLimit = await hasReachedUnitLimit(unit);
+
+    if (unitLimit.reached) {
+      return res.status(403).json({
+        success: false,
+        message: `${unit} is already full. Please select another unit.`
+      });
+    }
 
     if (!process.env.PAYSTACK_SECRET_KEY) {
       return res.status(500).json({

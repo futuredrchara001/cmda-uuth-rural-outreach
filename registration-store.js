@@ -16,7 +16,40 @@ const supabase =
     ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     : null;
 
-const MAX_REGISTRATIONS = 250;
+const UNIT_LIMITS = {
+  Organizing: Number(process.env.UNIT_LIMIT_ORGANIZING || 20),
+  Registration: Number(process.env.UNIT_LIMIT_REGISTRATION || 15),
+  "Protocol/Security": Number(
+    process.env.UNIT_LIMIT_PROTOCOL_SECURITY || 10
+  ),
+  Welfare: Number(process.env.UNIT_LIMIT_WELFARE || 40),
+  "Vital Signs": Number(
+    process.env.UNIT_LIMIT_VITAL_SIGNS || 25
+  ),
+  Laboratory: Number(
+    process.env.UNIT_LIMIT_LABORATORY || 20
+  ),
+  Pharmacy: Number(
+    process.env.UNIT_LIMIT_PHARMACY || 20
+  ),
+  "Media/Publicity": Number(
+    process.env.UNIT_LIMIT_MEDIA_PUBLICITY || 15
+  ),
+  "Accommodation/Sanitation": Number(
+    process.env.UNIT_LIMIT_ACCOMMODATION_SANITATION || 20
+  ),
+  Technical: Number(
+    process.env.UNIT_LIMIT_TECHNICAL || 10
+  ),
+  Transportation: Number(
+    process.env.UNIT_LIMIT_TRANSPORTATION || 7
+  )
+};
+
+const MAX_REGISTRATIONS = Object.values(UNIT_LIMITS).reduce(
+  (total, limit) => total + limit,
+  0
+);
 
 function requireSupabase() {
   if (!supabase) {
@@ -114,6 +147,35 @@ async function getSuccessfulRegistrations() {
   return (data || []).map(fromDatabase);
 }
 
+async function hasReachedUnitLimit(unit) {
+  const client = requireSupabase();
+
+  const limit = UNIT_LIMITS[unit];
+
+  if (limit === undefined) {
+    throw new Error(`No registration limit configured for unit: ${unit}`);
+  }
+
+  const { count, error } = await client
+    .from("registrations")
+    .select("id", {
+      count: "exact",
+      head: true
+    })
+    .eq("payment_status", "success")
+    .eq("unit", unit);
+
+  if (error) {
+    throw error;
+  }
+
+  return {
+    reached: (count || 0) >= limit,
+    count: count || 0,
+    limit
+  };
+}
+
 async function hasReachedLimit() {
   const client = requireSupabase();
 
@@ -129,7 +191,12 @@ async function hasReachedLimit() {
     throw error;
   }
 
-  return (count || 0) >= MAX_REGISTRATIONS;
+  return {
+    reached: (count || 0) >= MAX_REGISTRATIONS,
+    count: count || 0,
+    limit: MAX_REGISTRATIONS,
+    remaining: Math.max(MAX_REGISTRATIONS - (count || 0), 0)
+  };
 }
 
 async function addRegistration(registration) {
@@ -219,12 +286,31 @@ async function updateRegistration(id, updates) {
   return fromDatabase(data);
 }
 
+ 
+async function clearAllRegistrations() {
+  const client = requireSupabase();
+
+  const { error } = await client
+    .from("registrations")
+    .delete()
+    .not("id", "is", null);
+
+  if (error) {
+    throw error;
+  }
+
+  return true;
+}
+
 module.exports = {
   MAX_REGISTRATIONS,
+  UNIT_LIMITS,
   getRegistrations,
   getSuccessfulRegistrations,
   hasReachedLimit,
+  hasReachedUnitLimit,
   addRegistration,
   findByReference,
-  updateRegistration
+  updateRegistration,
+  clearAllRegistrations
 };

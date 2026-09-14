@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#5b1730">
+  <title>CMDA-UUTH Outreach Admin</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: #f7f2ed;
+      color: #38242d;
+      font-family: Arial, sans-serif;
+    }
+
+    header {
+      background: #5b1730;
+      color: white;
+      padding: 24px 20px;
+    }
+
+    header h1 {
+      margin: 0 0 6px;
+      font-size: 22px;
+    }
+
+    header p {
+      margin: 0;
+      opacity: .82;
+      font-size: 14px;
+    }
+
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 22px 16px 50px;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 6px 24px rgba(56,36,45,.08);
+    }
+
+    .label {
+      font-size: 12px;
+      color: #806d75;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    .value {
+      font-size: 30px;
+      font-weight: 700;
+      color: #5b1730;
+    }
+
+    .warning {
+      margin-top: 8px;
+      color: #a35a00;
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .full {
+      color: #a00000;
+      font-weight: 700;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+
+    .section-title {
+      margin: 28px 0 12px;
+      font-size: 19px;
+      color: #5b1730;
+    }
+
+    .unit {
+      background: white;
+      border-radius: 18px;
+      margin-bottom: 14px;
+      overflow: hidden;
+      box-shadow: 0 5px 20px rgba(56,36,45,.07);
+    }
+
+    .unit-head {
+      padding: 17px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid #eee5e7;
+    }
+
+    .unit-name {
+      font-weight: 700;
+      color: #5b1730;
+    }
+
+    .unit-count {
+      font-weight: 700;
+    }
+
+    .unit-body {
+      padding: 0 18px 14px;
+    }
+
+    .empty {
+      padding: 18px 0 6px;
+      color: #88777e;
+      font-size: 14px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 11px 6px;
+      border-bottom: 1px solid #f0e9eb;
+    }
+
+    th {
+      color: #806d75;
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .status {
+      margin-bottom: 18px;
+      font-size: 13px;
+      color: #806d75;
+    }
+
+    .error {
+      background: #fff0f0;
+      color: #a00000;
+      padding: 14px;
+      border-radius: 12px;
+      margin-bottom: 18px;
+    }
+
+    @media (max-width: 700px) {
+      .summary {
+        grid-template-columns: 1fr;
+      }
+
+      .unit-head {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      table {
+        font-size: 13px;
+      }
+
+      th,
+      td {
+        padding: 9px 4px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<header>
+  <h1>CMDA-UUTH Rural Outreach 2026</h1>
+  <p>Registration Admin Dashboard</p>
+</header>
+
+<main>
+
+  <div id="error"></div>
+
+  <div class="status" id="updated">
+    Loading registration data...
+  </div>
+
+  <section class="summary">
+    <div class="card">
+      <div class="label">Confirmed Registrations</div>
+      <div class="value" id="overallCount">—</div>
+      <div id="overallWarning"></div>
+    </div>
+
+    <div class="card">
+      <div class="label">Overall Capacity</div>
+      <div class="value" id="overallLimit">—</div>
+    </div>
+
+    <div class="card">
+      <div class="label">Remaining Slots</div>
+      <div class="value" id="overallRemaining">—</div>
+    </div>
+  </section>
+
+  <h2 class="section-title">Unit Registrations</h2>
+
+  <div id="units"></div>
+
+</main>
+
+<script>
+  const unitsContainer = document.getElementById("units");
+  const errorContainer = document.getElementById("error");
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function render(data) {
+    const overall = data.overall;
+
+    document.getElementById("overallCount").textContent =
+      `${overall.count} / ${overall.limit}`;
+
+    document.getElementById("overallLimit").textContent =
+      overall.limit;
+
+    document.getElementById("overallRemaining").textContent =
+      overall.remaining;
+
+    const overallWarning = document.getElementById("overallWarning");
+
+    if (overall.full) {
+      overallWarning.innerHTML =
+        '<div class="full">Registration capacity reached</div>';
+    } else if (overall.warning) {
+      overallWarning.innerHTML =
+        `<div class="warning">${overall.remaining} registration slot${overall.remaining === 1 ? "" : "s"} remaining</div>`;
+    } else {
+      overallWarning.innerHTML = "";
+    }
+
+    unitsContainer.innerHTML = "";
+
+    for (const [unitName, unit] of Object.entries(data.units)) {
+      let alert = "";
+
+      if (unit.full) {
+        alert = '<div class="full">Unit is full</div>';
+      } else if (unit.warning) {
+        alert =
+          `<div class="warning">${unit.remaining} slot${unit.remaining === 1 ? "" : "s"} remaining</div>`;
+      }
+
+      let rows = "";
+
+      if (unit.members.length === 0) {
+        rows = `
+          <div class="empty">
+            No confirmed registrations yet.
+          </div>
+        `;
+      } else {
+        rows = `
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Department</th>
+                <th>Level</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${unit.members.map(member => `
+                <tr>
+                  <td>${escapeHtml(member.name)}</td>
+                  <td>${escapeHtml(member.department)}</td>
+                  <td>${escapeHtml(member.level)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        `;
+      }
+
+      unitsContainer.innerHTML += `
+        <section class="unit">
+          <div class="unit-head">
+            <div>
+              <div class="unit-name">
+                ${escapeHtml(unitName)}
+              </div>
+              ${alert}
+            </div>
+
+            <div class="unit-count">
+              ${unit.count} / ${unit.limit}
+            </div>
+          </div>
+
+          <div class="unit-body">
+            ${rows}
+          </div>
+        </section>
+      `;
+    }
+
+    document.getElementById("updated").textContent =
+      `Last updated: ${new Date(data.updatedAt).toLocaleString()}`;
+
+    errorContainer.innerHTML = "";
+  }
+
+  async function loadDashboard() {
+    try {
+      const response = await fetch("/api/admin/stats", {
+        cache: "no-store"
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.message || "Unable to load dashboard."
+        );
+      }
+
+      render(data);
+    } catch (error) {
+      console.error(error);
+
+      errorContainer.innerHTML = `
+        <div class="error">
+          ${escapeHtml(error.message)}
+        </div>
+      `;
+    }
+  }
+
+  loadDashboard();
+
+  setInterval(loadDashboard, 30000);
+</script>
+
+</body>
+</html>
