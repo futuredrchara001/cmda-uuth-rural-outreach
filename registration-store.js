@@ -186,7 +186,15 @@ async function getRegistrationSettings() {
       ? new Date(process.env.REGISTRATION_CLOSE_AT).toISOString()
       : null,
     overallLimit: MAX_REGISTRATIONS,
-    unitLimits: { ...UNIT_LIMITS }
+    unitLimits: { ...UNIT_LIMITS },
+    payment: {
+      method: process.env.PAYMENT_METHOD || "Bank",
+      accountName: process.env.PAYMENT_ACCOUNT_NAME || "",
+      accountNumber: process.env.PAYMENT_ACCOUNT_NUMBER || "",
+      instructions:
+        process.env.PAYMENT_INSTRUCTIONS ||
+        "Please pay the registration fee and upload your receipt for verification."
+    }
   };
 
   try {
@@ -194,7 +202,7 @@ async function getRegistrationSettings() {
 
     const { data, error } = await db
       .from("registration_settings")
-      .select("close_at, overall_limit, unit_limits")
+      .select("close_at, overall_limit, unit_limits, payment_config")
       .eq("id", 1)
       .maybeSingle();
 
@@ -214,7 +222,24 @@ async function getRegistrationSettings() {
         ? new Date(data.close_at).toISOString()
         : null,
       overallLimit: Number(data.overall_limit) || MAX_REGISTRATIONS,
-      unitLimits
+      unitLimits,
+      payment: {
+        method:
+          data.payment_config?.method ||
+          defaults.payment.method,
+        accountName:
+          data.payment_config?.accountName ||
+          defaults.payment.accountName,
+        accountNumber:
+          data.payment_config?.accountNumber ||
+          defaults.payment.accountNumber,
+        instructions:
+          data.payment_config?.instructions ||
+          defaults.payment.instructions,
+        whatsappGroupLink:
+          data.payment_config?.whatsappGroupLink ||
+          defaults.payment.whatsappGroupLink
+      }
     };
   } catch (error) {
     console.warn(
@@ -245,6 +270,11 @@ async function updateRegistrationSettings(updates = {}) {
     unitLimits: {
       ...current.unitLimits,
       ...(updates.unitLimits || {})
+    },
+
+    payment: {
+      ...current.payment,
+      ...(updates.payment || {})
     }
   };
 
@@ -280,11 +310,12 @@ async function updateRegistrationSettings(updates = {}) {
         close_at: next.closeAt,
         overall_limit: next.overallLimit,
         unit_limits: next.unitLimits,
+        payment_config: next.payment,
         updated_at: new Date().toISOString()
       },
       { onConflict: "id" }
     )
-    .select("close_at, overall_limit, unit_limits")
+    .select("close_at, overall_limit, unit_limits, payment_config")
     .single();
 
   if (error) throw error;
@@ -294,7 +325,8 @@ async function updateRegistrationSettings(updates = {}) {
       ? new Date(data.close_at).toISOString()
       : null,
     overallLimit: Number(data.overall_limit),
-    unitLimits: data.unit_limits || {}
+    unitLimits: data.unit_limits || {},
+    payment: data.payment_config || next.payment
   };
 }
 

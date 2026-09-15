@@ -1104,6 +1104,18 @@ app.put("/api/admin/registration-settings", requireAdmin, async (req, res) => {
         body.unitLimits &&
         typeof body.unitLimits === "object"
           ? body.unitLimits
+          : {},
+
+      payment:
+        body.payment &&
+        typeof body.payment === "object"
+          ? {
+              method: String(body.payment.method || "").trim(),
+              accountName: String(body.payment.accountName || "").trim(),
+              accountNumber: String(body.payment.accountNumber || "").trim(),
+              instructions: String(body.payment.instructions || "").trim(),
+              whatsappGroupLink: String(body.payment.whatsappGroupLink || "").trim()
+            }
           : {}
     });
 
@@ -1225,6 +1237,12 @@ app.get("/api/registration-status", async (req, res) => {
     const status =
       registration.paymentStatus || "pending";
 
+    const settings =
+      await getRegistrationSettings();
+
+    const payment =
+      settings.payment || {};
+
     res.json({
       success: true,
 
@@ -1259,21 +1277,26 @@ app.get("/api/registration-status", async (req, res) => {
           PAYMENT_CONFIG.amount,
 
         method:
+          payment.method ||
           PAYMENT_CONFIG.method,
 
         accountName:
+          payment.accountName ||
           PAYMENT_CONFIG.accountName,
 
         accountNumber:
+          payment.accountNumber ||
           PAYMENT_CONFIG.accountNumber,
 
         instructions:
+          payment.instructions ||
           PAYMENT_CONFIG.instructions
       },
 
       whatsappAvailable:
         status === "success" &&
         Boolean(
+          payment.whatsappGroupLink ||
           PAYMENT_CONFIG.whatsappGroupLink
         )
     });

@@ -625,7 +625,7 @@ let currentStage = "payment";
     return `
       ${renderHeader(
         "Payment Under Verification",
-        "Your receipt has been received and is awaiting Finance verification.",
+        "Your payment receipt has been received and is being reviewed by our Finance team. Please don't submit the form again. Your registration is safely recorded. We'll update this page automatically once your payment has been verified.",
         "status-receipt-submitted"
       )}
 

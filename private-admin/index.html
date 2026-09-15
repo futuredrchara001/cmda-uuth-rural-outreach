@@ -162,6 +162,37 @@ main{max-width:1150px;margin:auto;padding:22px 16px 60px}
       <input id="overallRegistrationLimit" type="number" min="1" step="1">
 
       <h3 style="color:#5b1730;margin:22px 0 8px">
+        Payment Details
+      </h3>
+
+      <div style="display:grid;gap:12px">
+        <div>
+          <label for="paymentMethod">Payment category</label>
+          <input id="paymentMethod" type="text" placeholder="Bank">
+        </div>
+
+        <div>
+          <label for="paymentAccountName">Account name</label>
+          <input id="paymentAccountName" type="text">
+        </div>
+
+        <div>
+          <label for="paymentAccountNumber">Account number</label>
+          <input id="paymentAccountNumber" type="text">
+        </div>
+
+        <div>
+          <label for="paymentInstructions">Payment instructions</label>
+          <textarea id="paymentInstructions" rows="3"></textarea>
+        </div>
+
+        <div>
+          <label for="paymentWhatsappLink">Approved WhatsApp group link</label>
+          <input id="paymentWhatsappLink" type="url">
+        </div>
+      </div>
+
+      <h3 style="color:#5b1730;margin:22px 0 8px">
         Unit Limits
       </h3>
 
@@ -318,6 +349,23 @@ async function loadRegistrationSettings(){
       $("registrationCloseTime").value = "";
     }
 
+    const payment = settings.payment || {};
+
+    $("paymentMethod").value =
+      payment.method || "Bank";
+
+    $("paymentAccountName").value =
+      payment.accountName || "";
+
+    $("paymentAccountNumber").value =
+      payment.accountNumber || "";
+
+    $("paymentInstructions").value =
+      payment.instructions || "";
+
+    $("paymentWhatsappLink").value =
+      payment.whatsappGroupLink || "";
+
     const units = settings.unitLimits || {};
 
     $("unitLimitInputs").innerHTML =
@@ -390,7 +438,14 @@ async function saveRegistrationSettings(){
         body:JSON.stringify({
           closeAt,
           overallLimit,
-          unitLimits
+          unitLimits,
+          payment: {
+            method: $("paymentMethod").value.trim(),
+            accountName: $("paymentAccountName").value.trim(),
+            accountNumber: $("paymentAccountNumber").value.trim(),
+            instructions: $("paymentInstructions").value.trim(),
+            whatsappGroupLink: $("paymentWhatsappLink").value.trim()
+          }
         })
       }
     );
