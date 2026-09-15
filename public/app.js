@@ -12,10 +12,12 @@ Manual Payment + Receipt Verification
   const STORAGE_KEY =
     "cmda_outreach_registration_reference";
 
-  const POLL_INTERVAL = 30000;
+  const POLL_INTERVAL = 5000;
 
   let statusPollTimer = null;
   let currentReference = null;
+let currentStatusData = null;
+let currentStage = "payment";
 
   const $ = (selector) =>
     document.querySelector(selector);
@@ -208,7 +210,7 @@ Manual Payment + Receipt Verification
   ======================================================
   */
 
-  function renderStatusView(data) {
+  function renderStatusView(data, scroll=true) {
     const main =
       getMainContainer();
 
@@ -278,10 +280,12 @@ Manual Payment + Receipt Verification
 
     attachStatusEvents();
 
-    view.scrollIntoView({
-      behavior: "smooth",
-      block: "start"
-    });
+    if (scroll) {
+      view.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+    }
   }
 
   function renderHeader(
@@ -484,127 +488,132 @@ Manual Payment + Receipt Verification
         "status-pending"
       )}
 
-        ${renderReferenceCard(
-          registration
-        )}
+      ${renderReferenceCard(registration)}
 
-        ${renderProgress(
-          "pending"
-        )}
+      ${renderProgress("pending")}
 
-        <div class="status-section">
-          <h3>Payment Instructions</h3>
+      <div class="status-section">
+        <h3>Payment Instructions</h3>
+        <p class="status-intro">
+          Please make the registration payment using the account details below.
+          After payment, tap <strong>I Have Paid</strong> to continue.
+        </p>
 
-          <p class="status-intro">
-            Please make the registration payment
-            using the account details below.
-            After payment, upload your receipt
-            so Finance can verify the transaction.
-          </p>
+        ${renderPaymentDetails(payment)}
+      </div>
 
-          ${renderPaymentDetails(
-            payment
-          )}
+      <div class="status-action-card">
+        <button
+          type="button"
+          class="primary-button"
+          id="iHavePaidButton"
+        >
+          I Have Paid
+        </button>
+      </div>
+
+      <div class="status-meta">
+        <span>
+          Registration created:
+          ${formatDate(registration.createdAt)}
+        </span>
+      </div>
+    `;
+  }
+
+  function renderReceiptUploadStatus(
+    registration,
+    payment
+  ) {
+    return `
+      ${renderHeader(
+        "Upload Payment Receipt",
+        "Submit your payment receipt for Finance verification.",
+        "status-receipt-upload"
+      )}
+
+      ${renderReferenceCard(registration)}
+
+      ${renderProgress("receipt_upload")}
+
+      <div class="receipt-upload-card">
+        <div class="receipt-heading">
+          <div>
+            <h3>Payment Receipt</h3>
+            <p>
+              Upload the receipt for the payment you have just made.
+            </p>
+            <p class="receipt-limit-note">
+              Accepted: JPG, PNG, WEBP or PDF · Maximum size: 5 MB
+            </p>
+          </div>
         </div>
 
-        <div class="receipt-upload-card">
-
-          <div class="receipt-heading">
-            <div>
-              <h3>Upload Payment Receipt</h3>
-              <p>
-                Upload your OPay payment receipt for Finance verification.
-              </p>
-              <p class="receipt-limit-note">
-                Accepted: JPG, PNG, WEBP or PDF · Maximum size: 5 MB
-              </p>
-            </div>
-          </div>
-
-          <div class="receipt-transaction-fields">
-            <label
-              for="paymentTransactionDate"
-              class="receipt-field-label"
-            >
-              Payment transaction date <span aria-hidden="true">*</span>
-            </label>
-
-            <input
-              type="date"
-              id="paymentTransactionDate"
-              class="receipt-date-input"
-              required
-            />
-
-            <label
-              for="paymentTransactionTime"
-              class="receipt-field-label"
-            >
-              Payment transaction time
-              <span class="optional-label">(optional)</span>
-            </label>
-
-            <input
-              type="time"
-              id="paymentTransactionTime"
-              class="receipt-time-input"
-            />
-          </div>
-
+        <div class="receipt-transaction-fields">
           <label
-            class="receipt-file-label"
-            for="receiptFile"
+            for="paymentTransactionDate"
+            class="receipt-field-label"
           >
-            <span
-              id="receiptFileName"
-            >
-              Choose payment receipt
-            </span>
-
-            <input
-              type="file"
-              id="receiptFile"
-              accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf"
-            />
+            Payment transaction date <span aria-hidden="true">*</span>
           </label>
 
-          <button
-            type="button"
-            class="receipt-submit-button"
-            id="submitReceiptButton"
+          <input
+            type="date"
+            id="paymentTransactionDate"
+            class="receipt-date-input"
+            required
+          />
+
+          <label
+            for="paymentTransactionTime"
+            class="receipt-field-label"
           >
-            Submit Receipt for Verification
-          </button>
+            Payment transaction time
+            <span class="optional-label">(optional)</span>
+          </label>
 
-          <p
-            class="upload-message"
-            id="receiptUploadMessage"
-          ></p>
-
+          <input
+            type="time"
+            id="paymentTransactionTime"
+            class="receipt-time-input"
+          />
         </div>
 
-        <div class="patience-box">
-          <strong>
-            Important
-          </strong>
-
-          <p>
-            Uploading a receipt does not mean your
-            registration is confirmed. Please be
-            patient while Finance verifies the
-            actual payment.
-          </p>
-        </div>
-
-        <div class="status-meta">
-          <span>
-            Registration created:
-            ${formatDate(
-              registration.createdAt
-            )}
+        <label
+          class="receipt-file-label"
+          for="receiptFile"
+        >
+          <span id="receiptFileName">
+            Choose payment receipt
           </span>
-        </div>
 
+          <input
+            type="file"
+            id="receiptFile"
+            accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf"
+          />
+        </label>
+
+        <button
+          type="button"
+          class="receipt-submit-button"
+          id="submitReceiptButton"
+        >
+          Submit Receipt for Verification
+        </button>
+
+        <p
+          class="upload-message"
+          id="receiptUploadMessage"
+        ></p>
+      </div>
+
+      <div class="patience-box">
+        <strong>Important</strong>
+        <p>
+          Your receipt will be reviewed by our Finance team.
+          Please submit only the receipt for this registration.
+        </p>
       </div>
     `;
   }
@@ -715,6 +724,36 @@ Manual Payment + Receipt Verification
                 upload the appropriate payment receipt.
               </p>
             </div>
+          </div>
+
+          <div class="receipt-transaction-fields">
+            <label
+              for="paymentTransactionDate"
+              class="receipt-field-label"
+            >
+              Payment transaction date <span aria-hidden="true">*</span>
+            </label>
+
+            <input
+              type="date"
+              id="paymentTransactionDate"
+              class="receipt-date-input"
+              required
+            />
+
+            <label
+              for="paymentTransactionTime"
+              class="receipt-field-label"
+            >
+              Payment transaction time
+              <span class="optional-label">(optional)</span>
+            </label>
+
+            <input
+              type="time"
+              id="paymentTransactionTime"
+              class="receipt-time-input"
+            />
           </div>
 
           <label
@@ -942,6 +981,46 @@ Manual Payment + Receipt Verification
       );
     }
 
+    const iHavePaidButton =
+      $("#iHavePaidButton");
+
+    if (iHavePaidButton) {
+      iHavePaidButton.addEventListener(
+        "click",
+        () => {
+          const registration =
+            currentStatusData &&
+            currentStatusData.registration;
+
+          const payment =
+            currentStatusData &&
+            currentStatusData.payment;
+
+          if (!registration || !payment) return;
+
+          currentStage = "receipt_upload";
+
+          const view =
+            $("#registrationStatusView");
+
+          if (view) {
+            view.innerHTML =
+              renderReceiptUploadStatus(
+                registration,
+                payment
+              );
+
+            attachStatusEvents();
+
+            window.scrollTo({
+              top: 0,
+              behavior: "smooth"
+            });
+          }
+        }
+      );
+    }
+
     const submitButton =
       $("#submitReceiptButton");
 
@@ -1004,7 +1083,11 @@ Manual Payment + Receipt Verification
 
       hideRegistrationForm();
 
-      renderStatusView(data);
+      currentStatusData = data;
+
+      if (currentStage !== "receipt_upload" || scroll) {
+        renderStatusView(data, scroll);
+      }
 
       if (scroll) {
         window.scrollTo({
