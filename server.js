@@ -1280,6 +1280,10 @@ app.get("/api/registration-status", async (req, res) => {
           payment.method ||
           PAYMENT_CONFIG.method,
 
+        bankName:
+          payment.bankName ||
+          "OPay",
+
         accountName:
           payment.accountName ||
           PAYMENT_CONFIG.accountName,
