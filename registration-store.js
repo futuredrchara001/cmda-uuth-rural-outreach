@@ -188,7 +188,8 @@ async function getRegistrationSettings() {
     overallLimit: MAX_REGISTRATIONS,
     unitLimits: { ...UNIT_LIMITS },
     payment: {
-      method: process.env.PAYMENT_METHOD || "Bank",
+      method: process.env.PAYMENT_METHOD || "Bank Transfer",
+      bankName: process.env.PAYMENT_BANK_NAME || "OPay",
       accountName: process.env.PAYMENT_ACCOUNT_NAME || "",
       accountNumber: process.env.PAYMENT_ACCOUNT_NUMBER || "",
       instructions:
@@ -227,6 +228,9 @@ async function getRegistrationSettings() {
         method:
           data.payment_config?.method ||
           defaults.payment.method,
+        bankName:
+          data.payment_config?.bankName ||
+          defaults.payment.bankName,
         accountName:
           data.payment_config?.accountName ||
           defaults.payment.accountName,
