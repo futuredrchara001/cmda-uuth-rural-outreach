@@ -179,55 +179,172 @@ function invalidateSuccessfulRegistrationsCache() {
   successfulRegistrationsCacheAt = 0;
 }
 
+
+async function getRegistrationSettings() {
+  const defaults = {
+    closeAt: process.env.REGISTRATION_CLOSE_AT
+      ? new Date(process.env.REGISTRATION_CLOSE_AT).toISOString()
+      : null,
+    overallLimit: MAX_REGISTRATIONS,
+    unitLimits: { ...UNIT_LIMITS }
+  };
+
+  try {
+    const db = requireSupabase();
+
+    const { data, error } = await db
+      .from("registration_settings")
+      .select("close_at, overall_limit, unit_limits")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (!data) return defaults;
+
+    const unitLimits = {
+      ...UNIT_LIMITS,
+      ...(data.unit_limits && typeof data.unit_limits === "object"
+        ? data.unit_limits
+        : {})
+    };
+
+    return {
+      closeAt: data.close_at
+        ? new Date(data.close_at).toISOString()
+        : null,
+      overallLimit: Number(data.overall_limit) || MAX_REGISTRATIONS,
+      unitLimits
+    };
+  } catch (error) {
+    console.warn(
+      "Unable to load registration settings; using defaults:",
+      error.message
+    );
+
+    return defaults;
+  }
+}
+
+async function updateRegistrationSettings(updates = {}) {
+  const db = requireSupabase();
+
+  const current = await getRegistrationSettings();
+
+  const next = {
+    closeAt:
+      updates.closeAt !== undefined
+        ? updates.closeAt
+        : current.closeAt,
+
+    overallLimit:
+      updates.overallLimit !== undefined
+        ? Number(updates.overallLimit)
+        : current.overallLimit,
+
+    unitLimits: {
+      ...current.unitLimits,
+      ...(updates.unitLimits || {})
+    }
+  };
+
+  if (
+    next.closeAt !== null &&
+    Number.isNaN(new Date(next.closeAt).getTime())
+  ) {
+    throw new Error("Invalid registration closing date/time.");
+  }
+
+  if (
+    !Number.isInteger(next.overallLimit) ||
+    next.overallLimit < 1
+  ) {
+    throw new Error("Overall registration limit must be a positive whole number.");
+  }
+
+  for (const [unit, limit] of Object.entries(next.unitLimits)) {
+    if (!Number.isInteger(Number(limit)) || Number(limit) < 1) {
+      throw new Error(
+        `Invalid registration limit for ${unit}.`
+      );
+    }
+
+    next.unitLimits[unit] = Number(limit);
+  }
+
+  const { data, error } = await db
+    .from("registration_settings")
+    .upsert(
+      {
+        id: 1,
+        close_at: next.closeAt,
+        overall_limit: next.overallLimit,
+        unit_limits: next.unitLimits,
+        updated_at: new Date().toISOString()
+      },
+      { onConflict: "id" }
+    )
+    .select("close_at, overall_limit, unit_limits")
+    .single();
+
+  if (error) throw error;
+
+  return {
+    closeAt: data.close_at
+      ? new Date(data.close_at).toISOString()
+      : null,
+    overallLimit: Number(data.overall_limit),
+    unitLimits: data.unit_limits || {}
+  };
+}
+
 async function hasReachedUnitLimit(unit) {
   const client = requireSupabase();
+  const settings = await getRegistrationSettings();
+  const limit = Number(settings.unitLimits[unit]);
 
-  const limit = UNIT_LIMITS[unit];
-
-  if (limit === undefined) {
-    throw new Error(`No registration limit configured for unit: ${unit}`);
+  if (!limit) {
+    return {
+      reached: false,
+      count: 0,
+      limit: null,
+      remaining: null
+    };
   }
 
   const { count, error } = await client
     .from("registrations")
-    .select("id", {
-      count: "exact",
-      head: true
-    })
+    .select("id", { count: "exact", head: true })
     .eq("payment_status", "success")
     .eq("unit", unit);
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
   return {
     reached: (count || 0) >= limit,
     count: count || 0,
-    limit
+    limit,
+    remaining: Math.max(limit - (count || 0), 0)
   };
 }
 
 async function hasReachedLimit() {
   const client = requireSupabase();
+  const settings = await getRegistrationSettings();
+  const limit = Number(settings.overallLimit);
 
   const { count, error } = await client
     .from("registrations")
-    .select("id", {
-      count: "exact",
-      head: true
-    })
+    .select("id", { count: "exact", head: true })
     .eq("payment_status", "success");
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
   return {
-    reached: (count || 0) >= MAX_REGISTRATIONS,
+    reached: (count || 0) >= limit,
     count: count || 0,
-    limit: MAX_REGISTRATIONS,
-    remaining: Math.max(MAX_REGISTRATIONS - (count || 0), 0)
+    limit,
+    remaining: Math.max(limit - (count || 0), 0)
   };
 }
 
@@ -250,8 +367,13 @@ function getRegistrationCloseAt() {
 }
 
 async function getRegistrationClosureStatus() {
+  const settings = await getRegistrationSettings();
   const overallLimit = await hasReachedLimit();
-  const closeAt = getRegistrationCloseAt();
+
+  const closeAt = settings.closeAt
+    ? new Date(settings.closeAt)
+    : null;
+
   const dateReached =
     !!closeAt && new Date() >= closeAt;
 
@@ -263,7 +385,8 @@ async function getRegistrationClosureStatus() {
     closeAt: closeAt
       ? closeAt.toISOString()
       : null,
-    overallLimit
+    overallLimit,
+    unitLimits: settings.unitLimits
   };
 }
 
@@ -475,6 +598,9 @@ module.exports = {
   getPendingVerificationRegistrations,
   hasReachedLimit,
   hasReachedUnitLimit,
+  getRegistrationSettings,
+  updateRegistrationSettings,
+  getRegistrationClosureStatus,
   addRegistration,
   findByReference,
   updateRegistration,

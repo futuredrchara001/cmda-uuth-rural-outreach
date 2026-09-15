@@ -81,7 +81,15 @@ main{max-width:1150px;margin:auto;padding:22px 16px 60px}
 .empty{color:#806d75;padding:15px 0}
 .error{background:#fff0f0;color:#a00000;padding:12px;border-radius:10px;margin-bottom:15px}
 .success{background:#edf8f1;color:#247044;padding:12px;border-radius:10px;margin-bottom:15px}
-@media(max-width:700px){.summary{grid-template-columns:1fr}.head{align-items:flex-start}.head button{padding:10px}.login-card{padding:25px}}
+@media(max-width:700px){
+  .summary{grid-template-columns:1fr}
+  .head{align-items:flex-start}
+  .head button{padding:10px}
+  .login-card{padding:25px}
+  #registrationSettings .card > div{
+    grid-template-columns:1fr!important;
+  }
+}
 </style>
 </head>
 
@@ -115,6 +123,7 @@ main{max-width:1150px;margin:auto;padding:22px 16px 60px}
       <p>Registration Administration • <span id="role"></span></p>
     </div>
     <button id="resetRegistrations" class="btn danger" type="button">Reset Registrations</button>
+    <button id="openFinance" class="btn secondary" type="button">Finance Verification</button>
     <button id="logout" class="btn secondary">Log out</button>
   </div>
 </header>
@@ -128,23 +137,90 @@ main{max-width:1150px;margin:auto;padding:22px 16px 60px}
     <div class="card"><div class="label">Remaining</div><div id="remaining" class="value">—</div></div>
   </section>
 
+  <section id="registrationSettings" class="section">
+    <h2>Registration Controls</h2>
+
+    <div class="card">
+      <p class="sub" style="margin-bottom:18px">
+        Adjust when registration closes and the number of available places.
+        Changes are saved to the live registration system.
+      </p>
+
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px">
+        <div>
+          <label for="registrationCloseDate">Closing date</label>
+          <input id="registrationCloseDate" type="date">
+        </div>
+
+        <div>
+          <label for="registrationCloseTime">Closing time</label>
+          <input id="registrationCloseTime" type="time">
+        </div>
+      </div>
+
+      <label for="overallRegistrationLimit">Overall registration limit</label>
+      <input id="overallRegistrationLimit" type="number" min="1" step="1">
+
+      <h3 style="color:#5b1730;margin:22px 0 8px">
+        Unit Limits
+      </h3>
+
+      <div id="unitLimitInputs"
+           style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+      </div>
+
+      <button id="saveRegistrationSettings"
+              class="btn"
+              type="button"
+              style="margin-top:18px">
+        Save Registration Settings
+      </button>
+
+      <div id="settingsMessage" style="margin-top:12px"></div>
+    </div>
+  </section>
+
   <section class="section">
     <h2>Unit Registrations</h2>
     <div id="units" class="unit-grid"></div>
   </section>
 
-  <section id="financeSection" class="section hidden">
-    <h2>Pending Payment Verification</h2>
+  <section id="financePage" class="hidden">
+  <header>
+    <div class="head">
+      <div>
+        <h1>Finance Verification</h1>
+        <p>Pending payment receipts</p>
+      </div>
+      <button id="backFromFinance" class="btn secondary" type="button">
+        Back to Dashboard
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <div id="financeMessage"></div>
 
     <div class="card">
-      <p class="sub">Finance verification is required before a registration becomes confirmed.</p>
-      <label>Finance Verification PIN</label>
-      <input id="financePin" class="pin" type="password" inputmode="numeric">
-      <button id="loadReceipts" class="btn">Load Pending Receipts</button>
+      <h2 style="margin-top:0;color:#5b1730">Finance Access</h2>
+      <p class="sub">
+        Enter the Finance Verification PIN to view and manage pending payment receipts.
+      </p>
+
+      <label for="financePin">Finance Verification PIN</label>
+      <input id="financePin" class="pin" type="password" inputmode="numeric"
+             autocomplete="off" placeholder="Enter Finance PIN">
+
+      <button id="unlockFinance" class="btn" type="button">
+        Open Pending Receipts
+      </button>
     </div>
 
-    <div id="receipts"></div>
-  </section>
+    <div id="financeReceipts" class="hidden" style="margin-top:18px">
+      <div id="receipts"></div>
+    </div>
+  </main>
+</section>
 </main>
 </section>
 
@@ -195,8 +271,8 @@ function showDashboard(me){
  $("participantsPage").classList.add("hidden");
  $("dashboard").classList.remove("hidden");
  $("role").textContent=me.role==="admin"?"Administrator":"Administrator";
- $("financeSection").classList.remove("hidden");
  loadStats();
+ loadRegistrationSettings();
 }
 
 async function login(e){
@@ -213,6 +289,121 @@ async function login(e){
   });
   showDashboard(d);
  }catch(err){$("loginMsg").textContent=err.message}
+}
+
+async function loadRegistrationSettings(){
+  try{
+    const d = await api("/api/admin/registration-settings");
+    const settings = d.settings;
+
+    $("overallRegistrationLimit").value =
+      settings.overallLimit || "";
+
+    const closeAt = settings.closeAt
+      ? new Date(settings.closeAt)
+      : null;
+
+    if(closeAt && !Number.isNaN(closeAt.getTime())){
+      const nigeria = new Date(
+        closeAt.getTime() + (60 * 60 * 1000)
+      );
+
+      $("registrationCloseDate").value =
+        nigeria.toISOString().slice(0,10);
+
+      $("registrationCloseTime").value =
+        nigeria.toISOString().slice(11,16);
+    }else{
+      $("registrationCloseDate").value = "";
+      $("registrationCloseTime").value = "";
+    }
+
+    const units = settings.unitLimits || {};
+
+    $("unitLimitInputs").innerHTML =
+      Object.entries(units).map(([unit,limit]) => `
+        <div>
+          <label>${esc(unit)}</label>
+          <input
+            type="number"
+            min="1"
+            step="1"
+            class="unit-limit-input"
+            data-unit="${esc(unit)}"
+            value="${Number(limit)}">
+        </div>
+      `).join("");
+
+  }catch(err){
+    $("settingsMessage").innerHTML =
+      `<div class="error">${esc(err.message)}</div>`;
+  }
+}
+
+async function saveRegistrationSettings(){
+  const date = $("registrationCloseDate").value;
+  const time = $("registrationCloseTime").value;
+
+  let closeAt = null;
+
+  if(date || time){
+    if(!date || !time){
+      $("settingsMessage").innerHTML =
+        '<div class="error">Enter both a closing date and closing time.</div>';
+      return;
+    }
+
+    closeAt = `${date}T${time}:00+01:00`;
+  }
+
+  const overallLimit =
+    Number($("overallRegistrationLimit").value);
+
+  if(!Number.isInteger(overallLimit) || overallLimit < 1){
+    $("settingsMessage").innerHTML =
+      '<div class="error">Overall limit must be a positive whole number.</div>';
+    return;
+  }
+
+  const unitLimits = {};
+
+  document.querySelectorAll(".unit-limit-input").forEach(input=>{
+    unitLimits[input.dataset.unit] = Number(input.value);
+  });
+
+  if(
+    Object.values(unitLimits).some(
+      value => !Number.isInteger(value) || value < 1
+    )
+  ){
+    $("settingsMessage").innerHTML =
+      '<div class="error">Every unit limit must be a positive whole number.</div>';
+    return;
+  }
+
+  try{
+    const d = await api(
+      "/api/admin/registration-settings",
+      {
+        method:"PUT",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          closeAt,
+          overallLimit,
+          unitLimits
+        })
+      }
+    );
+
+    $("settingsMessage").innerHTML =
+      `<div class="success">${esc(d.message)}</div>`;
+
+    await loadStats();
+
+  }catch(err){
+    $("settingsMessage").innerHTML =
+      `<div class="error">${esc(err.message)}</div>`;
+  }
 }
 
 async function loadStats(){
@@ -299,70 +490,190 @@ async function loadStats(){
   $("message").innerHTML=`<div class="error">${esc(err.message)}</div>`;
  }
 }
-async function loadReceipts(){
- const pin=$("financePin").value;
- if(!pin)return;
+async function unlockFinance(){
+  const pin = $("financePin").value.trim();
 
- try{
-  const d=await api("/api/admin/pending-verifications?pin="+encodeURIComponent(pin));
-  renderReceipts(d.units,pin);
- }catch(err){
-  $("receipts").innerHTML=`<div class="error">${esc(err.message)}</div>`;
- }
+  if(!pin){
+    $("financeMessage").innerHTML =
+      '<div class="error">Finance Verification PIN is required.</div>';
+    return;
+  }
+
+  $("financeMessage").innerHTML = "";
+
+  try{
+    const d = await api(
+      "/api/admin/pending-verifications?pin=" +
+      encodeURIComponent(pin)
+    );
+
+    $("financeReceipts").classList.remove("hidden");
+    renderReceipts(d.units, pin);
+
+  }catch(err){
+    $("financeReceipts").classList.add("hidden");
+    $("financeMessage").innerHTML =
+      `<div class="error">${esc(err.message)}</div>`;
+  }
+}
+
+function openFinancePage(){
+  $("dashboard").classList.add("hidden");
+  $("participantsPage").classList.add("hidden");
+  $("financePage").classList.remove("hidden");
+
+  $("financeMessage").innerHTML = "";
+  $("financeReceipts").classList.add("hidden");
+  $("financePin").value = "";
+  $("financePin").focus();
+}
+
+function backFromFinance(){
+  $("financePage").classList.add("hidden");
+  $("dashboard").classList.remove("hidden");
 }
 
 function renderReceipts(units,pin){
- $("receipts").innerHTML=Object.entries(units).map(([unit,items])=>`
-  <div class="unit">
-   <div class="unit-head"><span>${esc(unit)}</span><span>${items.length} pending</span></div>
-   <div class="unit-body">
-    ${items.map(r=>`
-     <div class="item">
-      <strong>${esc(r.fullName)}</strong>
-      <div class="meta">
-       Ref: ${esc(r.reference)}<br>
-       ${esc(r.department)} • ${esc(r.level)}<br>
-       ₦${Number(r.amount||0).toLocaleString()} • ${esc(r.email)}
+  $("receipts").innerHTML =
+    Object.entries(units).map(([unit,items]) => `
+      <div class="unit">
+        <div class="unit-head">
+          <span>${esc(unit)}</span>
+          <span>${items.length} pending</span>
+        </div>
+
+        <div class="unit-body">
+          ${items.map(r => `
+            <div class="item">
+              <strong>${esc(r.fullName)}</strong>
+
+              <div class="meta">
+                Ref: ${esc(r.reference)}<br>
+                ${esc(r.department)} • ${esc(r.level)}<br>
+                ₦${Number(r.amount||0).toLocaleString()} • ${esc(r.email)}<br>
+                Payment:
+                ${esc(r.paymentTransactionAt || "Not supplied")}
+              </div>
+
+              <div class="actions">
+                <button
+                  class="btn secondary"
+                  onclick="viewReceipt('${encodeURIComponent(r.reference)}','${encodeURIComponent(pin)}')">
+                  View Receipt
+                </button>
+
+                <button
+                  class="btn"
+                  onclick="approve('${encodeURIComponent(r.reference)}','${encodeURIComponent(pin)}')">
+                  Approve
+                </button>
+
+                <button
+                  class="btn danger"
+                  onclick="reject('${encodeURIComponent(r.reference)}','${encodeURIComponent(pin)}')">
+                  Reject
+                </button>
+              </div>
+            </div>
+          `).join("")}
+        </div>
       </div>
-      <div class="actions">
-       <button class="btn secondary" onclick="viewReceipt('${encodeURIComponent(r.reference)}','${encodeURIComponent(pin)}')">View Receipt</button>
-       <button class="btn" onclick="approve('${encodeURIComponent(r.reference)}','${encodeURIComponent(pin)}')">Approve</button>
-       <button class="btn danger" onclick="reject('${encodeURIComponent(r.reference)}','${encodeURIComponent(pin)}')">Reject</button>
-      </div>
-     </div>`).join("")}
-   </div>
-  </div>`).join("")||'<div class="card empty">No receipts are currently awaiting verification.</div>';
+    `).join("") ||
+    '<div class="card empty">No receipts are currently awaiting verification.</div>';
 }
 
 async function viewReceipt(ref,pin){
- const d=await api("/api/admin/receipt/"+ref+"?pin="+pin);
- window.open(d.url,"_blank","noopener");
+  try{
+    const d = await api(
+      "/api/admin/receipt/" + ref + "?pin=" + pin
+    );
+
+    window.open(d.url,"_blank","noopener");
+  }catch(err){
+    $("financeMessage").innerHTML =
+      `<div class="error">${esc(err.message)}</div>`;
+  }
 }
 
 async function approve(ref,pin){
- if(!confirm("Confirm that Finance has verified this payment?"))return;
- await api("/api/admin/registrations/"+ref+"/approve",{
-  method:"POST",headers:{"Content-Type":"application/json"},
-  body:JSON.stringify({pin:decodeURIComponent(pin)})
- });
- $("message").innerHTML='<div class="success">Payment approved successfully.</div>';
- loadStats();loadReceipts();
+  if(!confirm("Confirm that Finance has verified this payment?")) return;
+
+  try{
+    await api(
+      "/api/admin/registrations/" + ref + "/approve",
+      {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          pin:decodeURIComponent(pin)
+        })
+      }
+    );
+
+    $("financeMessage").innerHTML =
+      '<div class="success">Payment approved successfully.</div>';
+
+    loadStats();
+
+    const d = await api(
+      "/api/admin/pending-verifications?pin=" + pin
+    );
+
+    renderReceipts(d.units,pin);
+
+  }catch(err){
+    $("financeMessage").innerHTML =
+      `<div class="error">${esc(err.message)}</div>`;
+  }
 }
 
 async function reject(ref,pin){
- const reason=prompt("Enter the reason for rejecting this payment:");
- if(!reason)return;
- await api("/api/admin/registrations/"+ref+"/reject",{
-  method:"POST",headers:{"Content-Type":"application/json"},
-  body:JSON.stringify({pin:decodeURIComponent(pin),reason})
- });
- $("message").innerHTML='<div class="success">Payment rejected and participant notified.</div>';
- loadStats();loadReceipts();
+  const reason = prompt(
+    "Enter the reason for rejecting this payment:"
+  );
+
+  if(!reason) return;
+
+  try{
+    await api(
+      "/api/admin/registrations/" + ref + "/reject",
+      {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          pin:decodeURIComponent(pin),
+          reason
+        })
+      }
+    );
+
+    $("financeMessage").innerHTML =
+      '<div class="success">Payment rejected and participant notified.</div>';
+
+    loadStats();
+
+    const d = await api(
+      "/api/admin/pending-verifications?pin=" + pin
+    );
+
+    renderReceipts(d.units,pin);
+
+  }catch(err){
+    $("financeMessage").innerHTML =
+      `<div class="error">${esc(err.message)}</div>`;
+  }
 }
 
 $("loginForm").addEventListener("submit",login);
-$("loadReceipts").addEventListener("click",loadReceipts);
+$("openFinance").addEventListener("click",openFinancePage);
+$("backFromFinance").addEventListener("click",backFromFinance);
+$("unlockFinance").addEventListener("click",unlockFinance);
 
+$("financePin").addEventListener("keydown",e=>{
+  if(e.key==="Enter") unlockFinance();
+});
+
+$("saveRegistrationSettings").addEventListener("click",saveRegistrationSettings);
 $("resetRegistrations").addEventListener("click",async()=>{
   const confirmed = confirm(
     "WARNING: This will permanently clear ALL registration records.\n\nAre you sure you want to continue?"

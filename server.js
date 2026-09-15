@@ -13,6 +13,8 @@ const {
   findByReference,
   updateRegistration,
   getPendingVerificationRegistrations,
+  getRegistrationSettings,
+  updateRegistrationSettings,
   clearAllRegistrations,
   generateParticipantReference,
   invalidateSuccessfulRegistrationsCache
@@ -1061,44 +1063,100 @@ app.post("/api/admin/reset", requireAdmin, async (req, res) => {
   }
 });
 
+
+/*
+==================================================
+ADMIN REGISTRATION SETTINGS
+==================================================
+*/
+
+app.get("/api/admin/registration-settings", requireAdmin, async (req, res) => {
+  try {
+    const settings = await getRegistrationSettings();
+
+    res.json({
+      success: true,
+      settings
+    });
+  } catch (error) {
+    console.error("Registration settings load error:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Unable to load registration settings."
+    });
+  }
+});
+
+app.put("/api/admin/registration-settings", requireAdmin, async (req, res) => {
+  try {
+    const body = req.body || {};
+
+    const settings = await updateRegistrationSettings({
+      closeAt:
+        body.closeAt === null || body.closeAt === ""
+          ? null
+          : String(body.closeAt || "").trim(),
+
+      overallLimit: Number(body.overallLimit),
+
+      unitLimits:
+        body.unitLimits &&
+        typeof body.unitLimits === "object"
+          ? body.unitLimits
+          : {}
+    });
+
+    res.json({
+      success: true,
+      message: "Registration settings saved successfully.",
+      settings
+    });
+  } catch (error) {
+    console.error("Registration settings update error:", error.message);
+
+    res.status(400).json({
+      success: false,
+      message: error.message || "Unable to save registration settings."
+    });
+  }
+});
+
 app.get("/api/admin/stats", requireAdmin, async (req, res) => {
   try {
     const {
-      MAX_REGISTRATIONS,
-      UNIT_LIMITS,
-      getSuccessfulRegistrations,
-      hasReachedLimit,
-      clearAllRegistrations
+      getSuccessfulRegistrations
     } = require("./registration-store");
 
+    const settings = await getRegistrationSettings();
     const registrations = await getSuccessfulRegistrations();
 
     const overallCount = registrations.length;
+    const overallLimit = Number(settings.overallLimit);
+
     const overallRemaining = Math.max(
-      MAX_REGISTRATIONS - overallCount,
+      overallLimit - overallCount,
       0
     );
 
     const overall = {
       count: overallCount,
-      limit: MAX_REGISTRATIONS,
+      limit: overallLimit,
       remaining: overallRemaining,
-      reached: overallRemaining === 0
+      warning:
+        overallRemaining > 0 &&
+        overallRemaining <= 3,
+      full: overallRemaining === 0
     };
 
     const units = {};
 
-    for (const [unit, limit] of Object.entries(UNIT_LIMITS)) {
-      const members = registrations
-        .filter(registration => registration.unit === unit)
-        .map(registration => ({
-          reference: registration.reference,
-          name: registration.fullName,
-          department: registration.department,
-          level: registration.level,
-          email: registration.email,
-          phone: registration.phone
-        }));
+    for (const [unit, limitValue] of Object.entries(settings.unitLimits)) {
+      const limit = Number(limitValue);
+
+      const members = registrations.filter(
+        registration => registration.unit === unit
+      );
 
       const count = members.length;
       const remaining = Math.max(limit - count, 0);
@@ -1107,56 +1165,38 @@ app.get("/api/admin/stats", requireAdmin, async (req, res) => {
         count,
         limit,
         remaining,
-        warning: remaining > 0 && remaining <= 3,
+        warning:
+          remaining > 0 &&
+          remaining <= 3,
         full: remaining === 0,
-        members
+        members: members.map(registration => ({
+          name: registration.fullName,
+          fullName: registration.fullName,
+          reference: registration.reference,
+          department: registration.department,
+          level: registration.level,
+          email: registration.email,
+          phone: registration.phone
+        }))
       };
     }
 
     res.json({
       success: true,
-      overall: {
-        count: overall.count,
-        limit: MAX_REGISTRATIONS,
-        remaining: overall.remaining,
-        warning:
-          overall.remaining > 0 &&
-          overall.remaining <= 3,
-        full: overall.remaining === 0
-      },
+      overall,
       units,
-      updatedAt: new Date().toISOString()
+      registrationOpen:
+        (await getRegistrationClosureStatus()).open
     });
   } catch (error) {
-    console.error("Admin stats error:", error);
+    console.error("Admin stats error:", error.message);
 
     res.status(500).json({
       success: false,
-      message: "Unable to load registration statistics."
+      message: "Unable to load dashboard statistics."
     });
   }
 });
-
-
-/*
-==================================================
-PARTICIPANT: SUBMIT PAYMENT RECEIPT
-==================================================
-Uploading a receipt does NOT confirm payment.
-
-The registration remains pending until Finance
-manually verifies the actual transaction.
-*/
-
-
-/*
-==================================================
-PARTICIPANT: REGISTRATION STATUS
-==================================================
-Only participant-safe information is returned.
-Receipt storage paths and admin information are
-never exposed here.
-*/
 
 app.get("/api/registration-status", async (req, res) => {
   try {
