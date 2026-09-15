@@ -1,37 +1,1601 @@
-const form = document.getElementById("registrationForm");
+/*
+========================================================
+CMDA-UUTH RURAL OUTREACH
+Participant Registration Application
+Manual Payment + Receipt Verification
+========================================================
+*/
 
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
+(() => {
+  "use strict";
 
-  const button = form.querySelector('button[type="submit"]');
-  const originalText = button.textContent;
+  const STORAGE_KEY =
+    "cmda_outreach_registration_reference";
 
-  button.disabled = true;
-  button.textContent = "Preparing payment...";
+  const POLL_INTERVAL = 30000;
 
-  const formData = new FormData(form);
-  const data = Object.fromEntries(formData.entries());
+  let statusPollTimer = null;
+  let currentReference = null;
 
-  try {
-    const response = await fetch("/api/register", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(data)
-    });
+  const $ = (selector) =>
+    document.querySelector(selector);
 
-    const result = await response.json();
+  const registrationForm =
+    $("#registrationForm");
 
-    if (!response.ok || !result.success) {
-      throw new Error(result.message || "Unable to start registration.");
+  /*
+  ======================================================
+  HELPERS
+  ======================================================
+  */
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function formatAmount(amount) {
+    const number = Number(amount || 0);
+
+    return `₦${number.toLocaleString("en-NG")}`;
+  }
+
+  function formatDate(value) {
+    if (!value) return "—";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return "—";
     }
 
-    window.location.href = result.authorizationUrl;
-
-  } catch (error) {
-    alert(error.message);
-    button.disabled = false;
-    button.textContent = originalText;
+    return date.toLocaleString("en-NG", {
+      dateStyle: "medium",
+      timeStyle: "short"
+    });
   }
-});
+
+  function saveReference(reference) {
+    if (!reference) return;
+
+    localStorage.setItem(
+      STORAGE_KEY,
+      reference
+    );
+
+    currentReference = reference;
+  }
+
+  function getSavedReference() {
+    return (
+      localStorage.getItem(STORAGE_KEY) ||
+      ""
+    );
+  }
+
+  function clearSavedReference() {
+    localStorage.removeItem(STORAGE_KEY);
+    currentReference = null;
+  }
+
+  function stopStatusPolling() {
+    if (statusPollTimer) {
+      clearInterval(statusPollTimer);
+      statusPollTimer = null;
+    }
+  }
+
+  function startStatusPolling() {
+    stopStatusPolling();
+
+    statusPollTimer = setInterval(() => {
+      if (currentReference) {
+        loadRegistrationStatus(
+          currentReference,
+          false
+        );
+      }
+    }, POLL_INTERVAL);
+  }
+
+  /*
+  ======================================================
+  FORM MESSAGE
+  ======================================================
+  */
+
+  function showFormMessage(
+    message,
+    type = "error"
+  ) {
+    let box = $("#formMessage");
+
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "formMessage";
+
+      if (registrationForm) {
+        registrationForm.prepend(box);
+      }
+    }
+
+    box.className =
+      `form-message form-message-${type}`;
+
+    box.textContent = message;
+
+    box.scrollIntoView({
+      behavior: "smooth",
+      block: "center"
+    });
+  }
+
+  /*
+  ======================================================
+  MAIN VIEW HELPERS
+  ======================================================
+  */
+
+  function getMainContainer() {
+    return (
+      $("#registrationView") ||
+      $(".registration") ||
+      document.querySelector(
+        "main"
+      ) ||
+      document.body
+    );
+  }
+
+  function hideRegistrationForm() {
+    if (registrationForm) {
+      registrationForm.style.display =
+        "none";
+    }
+
+    const paymentPreview =
+      $(".payment-preview");
+
+    if (paymentPreview) {
+      paymentPreview.style.display =
+        "none";
+    }
+
+    const intro =
+      $(".intro");
+
+    if (intro) {
+      intro.style.display = "none";
+    }
+  }
+
+  function showRegistrationForm() {
+    if (registrationForm) {
+      registrationForm.style.display =
+        "";
+    }
+
+    const paymentPreview =
+      $(".payment-preview");
+
+    if (paymentPreview) {
+      paymentPreview.style.display =
+        "";
+    }
+
+    const intro =
+      $(".intro");
+
+    if (intro) {
+      intro.style.display = "";
+    }
+
+    const statusView =
+      $("#registrationStatusView");
+
+    if (statusView) {
+      statusView.remove();
+    }
+  }
+
+  /*
+  ======================================================
+  STATUS VIEW
+  ======================================================
+  */
+
+  function renderStatusView(data) {
+    const main =
+      getMainContainer();
+
+    let view =
+      $("#registrationStatusView");
+
+    if (!view) {
+      view =
+        document.createElement("section");
+
+      view.id =
+        "registrationStatusView";
+
+      view.className =
+        "registration-status-view";
+
+      main.appendChild(view);
+    }
+
+    const registration =
+      data.registration || {};
+
+    const payment =
+      data.payment || {};
+
+    const status =
+      registration.paymentStatus ||
+      "pending";
+
+    const reference =
+      registration.reference || "";
+
+    currentReference = reference;
+
+    let content = "";
+
+    if (status === "success") {
+      content =
+        renderSuccessStatus(
+          registration,
+          payment,
+          data
+        );
+    } else if (status === "rejected") {
+      content =
+        renderRejectedStatus(
+          registration,
+          payment
+        );
+    } else if (
+      status === "receipt_submitted"
+    ) {
+      content =
+        renderReceiptSubmittedStatus(
+          registration,
+          payment
+        );
+    } else {
+      content =
+        renderPendingStatus(
+          registration,
+          payment
+        );
+    }
+
+    view.innerHTML = content;
+
+    attachStatusEvents();
+
+    view.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+  }
+
+  function renderHeader(
+    title,
+    subtitle,
+    statusClass
+  ) {
+    return `
+      <div class="status-card ${statusClass}">
+        <div class="status-card-header">
+          <div class="status-indicator">
+            <span class="status-indicator-dot"></span>
+          </div>
+
+          <div>
+            <h2>${escapeHtml(title)}</h2>
+            <p>${escapeHtml(subtitle)}</p>
+          </div>
+        </div>
+    `;
+  }
+
+  function renderReferenceCard(
+    registration
+  ) {
+    const reference =
+      registration.reference || "";
+
+    return `
+      <div class="reference-card">
+        <div>
+          <span class="reference-label">
+            Registration Reference
+          </span>
+
+          <strong>
+            ${escapeHtml(reference)}
+          </strong>
+        </div>
+
+        <button
+          type="button"
+          class="copy-button"
+          data-copy="${escapeHtml(reference)}"
+        >
+          Copy
+        </button>
+      </div>
+    `;
+  }
+
+  function renderProgress(status) {
+    const receiptDone =
+      status === "receipt_submitted" ||
+      status === "success";
+
+    const verified =
+      status === "success";
+
+    return `
+      <div class="status-progress">
+
+        <div class="progress-step completed">
+          <span class="progress-number">1</span>
+          <div>
+            <strong>Registration saved</strong>
+            <small>Your details have been received.</small>
+          </div>
+        </div>
+
+        <div class="progress-line ${
+          receiptDone ? "completed" : ""
+        }"></div>
+
+        <div class="progress-step ${
+          receiptDone
+            ? "completed"
+            : "current"
+        }">
+          <span class="progress-number">2</span>
+          <div>
+            <strong>Payment receipt</strong>
+            <small>
+              ${
+                receiptDone
+                  ? "Receipt submitted."
+                  : "Payment and receipt required."
+              }
+            </small>
+          </div>
+        </div>
+
+        <div class="progress-line ${
+          verified ? "completed" : ""
+        }"></div>
+
+        <div class="progress-step ${
+          verified
+            ? "completed"
+            : "current"
+        }">
+          <span class="progress-number">3</span>
+          <div>
+            <strong>Finance verification</strong>
+            <small>
+              ${
+                verified
+                  ? "Payment verified."
+                  : "Awaiting Finance."
+              }
+            </small>
+          </div>
+        </div>
+
+      </div>
+    `;
+  }
+
+  function renderPaymentDetails(
+    payment
+  ) {
+    return `
+      <div class="payment-instruction-card">
+
+        <div class="payment-amount">
+          <span>Registration Fee</span>
+          <strong>
+            ${formatAmount(payment.amount)}
+          </strong>
+        </div>
+
+        <div class="payment-details">
+
+          <div class="payment-row">
+            <span>Payment Method</span>
+            <strong>
+              ${escapeHtml(payment.method)}
+            </strong>
+          </div>
+
+          <div class="payment-row">
+            <span>Account Name</span>
+            <strong>
+              ${escapeHtml(
+                payment.accountName || "—"
+              )}
+            </strong>
+          </div>
+
+          <div class="payment-row">
+            <span>Account Number</span>
+            <div class="payment-account">
+              <strong>
+                ${escapeHtml(
+                  payment.accountNumber || "—"
+                )}
+              </strong>
+
+              ${
+                payment.accountNumber
+                  ? `
+                    <button
+                      type="button"
+                      class="copy-button small"
+                      data-copy="${escapeHtml(
+                        payment.accountNumber
+                      )}"
+                    >
+                      Copy
+                    </button>
+                  `
+                  : ""
+              }
+            </div>
+          </div>
+
+        </div>
+
+        <div class="payment-instructions">
+          <span>Payment Instructions</span>
+          <p>
+            ${escapeHtml(
+              payment.instructions || ""
+            )}
+          </p>
+        </div>
+
+      </div>
+    `;
+  }
+
+  function renderPendingStatus(
+    registration,
+    payment
+  ) {
+    return `
+      ${renderHeader(
+        "Complete Your Payment",
+        "Your registration has been saved. The next step is payment.",
+        "status-pending"
+      )}
+
+        ${renderReferenceCard(
+          registration
+        )}
+
+        ${renderProgress(
+          "pending"
+        )}
+
+        <div class="status-section">
+          <h3>Payment Instructions</h3>
+
+          <p class="status-intro">
+            Please make the registration payment
+            using the account details below.
+            After payment, upload your receipt
+            so Finance can verify the transaction.
+          </p>
+
+          ${renderPaymentDetails(
+            payment
+          )}
+        </div>
+
+        <div class="receipt-upload-card">
+
+          <div class="receipt-heading">
+            <div>
+              <h3>Upload Payment Receipt</h3>
+              <p>
+                Upload your OPay payment receipt for Finance verification.
+              </p>
+              <p class="receipt-limit-note">
+                Accepted: JPG, PNG, WEBP or PDF · Maximum size: 5 MB
+              </p>
+            </div>
+          </div>
+
+          <div class="receipt-transaction-fields">
+            <label
+              for="paymentTransactionDate"
+              class="receipt-field-label"
+            >
+              Payment transaction date <span aria-hidden="true">*</span>
+            </label>
+
+            <input
+              type="date"
+              id="paymentTransactionDate"
+              class="receipt-date-input"
+              required
+            />
+
+            <label
+              for="paymentTransactionTime"
+              class="receipt-field-label"
+            >
+              Payment transaction time
+              <span class="optional-label">(optional)</span>
+            </label>
+
+            <input
+              type="time"
+              id="paymentTransactionTime"
+              class="receipt-time-input"
+            />
+          </div>
+
+          <label
+            class="receipt-file-label"
+            for="receiptFile"
+          >
+            <span
+              id="receiptFileName"
+            >
+              Choose payment receipt
+            </span>
+
+            <input
+              type="file"
+              id="receiptFile"
+              accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf"
+            />
+          </label>
+
+          <button
+            type="button"
+            class="receipt-submit-button"
+            id="submitReceiptButton"
+          >
+            Submit Receipt for Verification
+          </button>
+
+          <p
+            class="upload-message"
+            id="receiptUploadMessage"
+          ></p>
+
+        </div>
+
+        <div class="patience-box">
+          <strong>
+            Important
+          </strong>
+
+          <p>
+            Uploading a receipt does not mean your
+            registration is confirmed. Please be
+            patient while Finance verifies the
+            actual payment.
+          </p>
+        </div>
+
+        <div class="status-meta">
+          <span>
+            Registration created:
+            ${formatDate(
+              registration.createdAt
+            )}
+          </span>
+        </div>
+
+      </div>
+    `;
+  }
+
+  function renderReceiptSubmittedStatus(
+    registration,
+    payment
+  ) {
+    return `
+      ${renderHeader(
+        "Payment Under Verification",
+        "Your receipt has been received and is awaiting Finance verification.",
+        "status-receipt-submitted"
+      )}
+
+        ${renderReferenceCard(
+          registration
+        )}
+
+        ${renderProgress(
+          "receipt_submitted"
+        )}
+
+        <div class="verification-message">
+          <div class="verification-icon">
+            <span></span>
+          </div>
+
+          <div>
+            <h3>Receipt Submitted Successfully</h3>
+
+            <p>
+              Your payment receipt has been sent
+              to the Finance Administrator.
+              Your registration remains pending
+              until the payment is verified.
+            </p>
+          </div>
+        </div>
+
+        ${renderPaymentDetails(
+          payment
+        )}
+
+        <div class="patience-box">
+          <strong>
+            Please be patient
+          </strong>
+
+          <p>
+            You do not need to upload another receipt
+            while this verification is pending.
+            This page will update when your status changes.
+          </p>
+        </div>
+
+        <div class="status-meta">
+          <span>
+            Receipt submitted:
+            ${formatDate(
+              registration.receiptUploadedAt
+            )}
+          </span>
+        </div>
+
+      </div>
+    `;
+  }
+
+  function renderRejectedStatus(
+    registration,
+    payment
+  ) {
+    return `
+      ${renderHeader(
+        "Payment Needs Attention",
+        "Finance could not approve the submitted payment receipt.",
+        "status-rejected"
+      )}
+
+        ${renderReferenceCard(
+          registration
+        )}
+
+        <div class="rejection-box">
+          <h3>Reason for Rejection</h3>
+
+          <p>
+            ${escapeHtml(
+              registration.rejectionReason ||
+              "Please review your payment and submit a valid receipt."
+            )}
+          </p>
+        </div>
+
+        ${renderPaymentDetails(
+          payment
+        )}
+
+        <div class="receipt-upload-card">
+
+          <div class="receipt-heading">
+            <div>
+              <h3>Submit a New Receipt</h3>
+
+              <p>
+                If you have corrected the issue,
+                upload the appropriate payment receipt.
+              </p>
+            </div>
+          </div>
+
+          <label
+            class="receipt-file-label"
+            for="receiptFile"
+          >
+            <span id="receiptFileName">
+              Choose payment receipt
+            </span>
+
+            <input
+              type="file"
+              id="receiptFile"
+              accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf"
+            />
+          </label>
+
+          <button
+            type="button"
+            class="receipt-submit-button"
+            id="submitReceiptButton"
+          >
+            Submit New Receipt
+          </button>
+
+          <p
+            class="upload-message"
+            id="receiptUploadMessage"
+          ></p>
+
+        </div>
+
+        <div class="patience-box">
+          <strong>
+            Registration is not yet confirmed
+          </strong>
+
+          <p>
+            Your registration will only become
+            successful after Finance verifies the
+            payment.
+          </p>
+        </div>
+
+      </div>
+    `;
+  }
+
+  function renderSuccessStatus(
+    registration,
+    payment,
+    data
+  ) {
+    const whatsappAvailable =
+      Boolean(data.whatsappAvailable);
+
+    return `
+      ${renderHeader(
+        "Registration Confirmed",
+        "Your payment has been verified by Finance.",
+        "status-confirmed"
+      )}
+
+        ${renderReferenceCard(
+          registration
+        )}
+
+        ${renderProgress(
+          "success"
+        )}
+
+        <div class="success-confirmation">
+
+          <div class="success-mark">
+            <span></span>
+          </div>
+
+          <h3>
+            You are officially registered.
+          </h3>
+
+          <p>
+            Your payment has been verified and
+            your place for the outreach has been
+            confirmed.
+          </p>
+
+          <div class="confirmed-details">
+            <div>
+              <span>Name</span>
+              <strong>
+                ${escapeHtml(
+                  registration.fullName
+                )}
+              </strong>
+            </div>
+
+            <div>
+              <span>Unit</span>
+              <strong>
+                ${escapeHtml(
+                  registration.unit
+                )}
+              </strong>
+            </div>
+
+            <div>
+              <span>Registration Reference</span>
+              <strong>
+                ${escapeHtml(
+                  registration.reference
+                )}
+              </strong>
+            </div>
+          </div>
+
+        </div>
+
+        ${
+          whatsappAvailable
+            ? `
+              <div class="whatsapp-confirmation">
+
+                <h3>
+                  Join the Outreach WhatsApp Group
+                </h3>
+
+                <p>
+                  Your registration has been approved.
+                  You can now join the official
+                  outreach WhatsApp group.
+                </p>
+
+                <button
+                  type="button"
+                  class="whatsapp-button"
+                  id="joinWhatsappButton"
+                >
+                  Join WhatsApp Group
+                </button>
+
+              </div>
+            `
+            : ""
+        }
+
+        <div class="status-meta">
+          <span>
+            Verified:
+            ${formatDate(
+              registration.verifiedAt
+            )}
+          </span>
+        </div>
+
+      </div>
+    `;
+  }
+
+  /*
+  ======================================================
+  STATUS EVENTS
+  ======================================================
+  */
+
+  function attachStatusEvents() {
+    document
+      .querySelectorAll(
+        "[data-copy]"
+      )
+      .forEach((button) => {
+        button.addEventListener(
+          "click",
+          async () => {
+            const value =
+              button.getAttribute(
+                "data-copy"
+              );
+
+            try {
+              await navigator.clipboard.writeText(
+                value
+              );
+
+              const original =
+                button.textContent;
+
+              button.textContent =
+                "Copied";
+
+              setTimeout(() => {
+                button.textContent =
+                  original;
+              }, 1500);
+
+            } catch {
+              window.prompt(
+                "Copy this value:",
+                value
+              );
+            }
+          }
+        );
+      });
+
+    const fileInput =
+      $("#receiptFile");
+
+    const fileName =
+      $("#receiptFileName");
+
+    if (fileInput && fileName) {
+      fileInput.addEventListener(
+        "change",
+        () => {
+          const file =
+            fileInput.files &&
+            fileInput.files[0];
+
+          fileName.textContent =
+            file
+              ? file.name
+              : "Choose payment receipt";
+        }
+      );
+    }
+
+    const submitButton =
+      $("#submitReceiptButton");
+
+    if (submitButton) {
+      submitButton.addEventListener(
+        "click",
+        submitReceipt
+      );
+    }
+
+    const joinWhatsappButton =
+      $("#joinWhatsappButton");
+
+    if (joinWhatsappButton) {
+      joinWhatsappButton.addEventListener(
+        "click",
+        openApprovedWhatsapp
+      );
+    }
+  }
+
+  /*
+  ======================================================
+  LOAD STATUS
+  ======================================================
+  */
+
+  async function loadRegistrationStatus(
+    reference,
+    scroll = true
+  ) {
+    if (!reference) return;
+
+    try {
+      const response =
+      await fetch(
+          `/api/registration-status?reference=${encodeURIComponent(
+            reference
+          )}`,
+          {
+            method: "GET",
+            headers: {
+              Accept:
+                "application/json"
+            }
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.message ||
+          "Unable to load registration status."
+        );
+      }
+
+      saveReference(reference);
+
+      hideRegistrationForm();
+
+      renderStatusView(data);
+
+      if (scroll) {
+        window.scrollTo({
+          top: 0,
+          behavior: "smooth"
+        });
+      }
+
+      if (
+        data.registration.paymentStatus ===
+        "success"
+      ) {
+        stopStatusPolling();
+      } else {
+        startStatusPolling();
+      }
+
+    } catch (error) {
+      console.error(
+        "Status loading error:",
+        error
+      );
+
+      if (scroll) {
+        showStatusError(
+          error.message ||
+          "Unable to load your registration."
+        );
+      }
+    }
+  }
+
+  function showStatusError(
+    message
+  ) {
+    hideRegistrationForm();
+
+    const main =
+      getMainContainer();
+
+    let view =
+      $("#registrationStatusView");
+
+    if (!view) {
+      view =
+        document.createElement("section");
+
+      view.id =
+        "registrationStatusView";
+
+      view.className =
+        "registration-status-view";
+
+      main.appendChild(view);
+    }
+
+    view.innerHTML = `
+      <div class="status-card status-error">
+
+        <div class="status-card-header">
+          <div class="status-indicator">
+            <span class="status-indicator-dot"></span>
+          </div>
+
+          <div>
+            <h2>Registration Not Found</h2>
+            <p>
+              We could not load the saved registration.
+            </p>
+          </div>
+        </div>
+
+        <div class="error-message">
+          ${escapeHtml(message)}
+        </div>
+
+        <button
+          type="button"
+          class="secondary-action-button"
+          id="returnToRegistration"
+        >
+          Return to Registration
+        </button>
+
+      </div>
+    `;
+
+    const button =
+      $("#returnToRegistration");
+
+    if (button) {
+      button.addEventListener(
+        "click",
+        () => {
+          clearSavedReference();
+          stopStatusPolling();
+          showRegistrationForm();
+        }
+      );
+    }
+  }
+
+  /*
+ ======================================================
+  RECEIPT UPLOAD
+  ======================================================
+  */
+
+  async function submitReceipt() {
+    const transactionDateInput =
+      $("#paymentTransactionDate");
+    const transactionTimeInput =
+      $("#paymentTransactionTime");
+
+    const transactionDate =
+      transactionDateInput
+        ? transactionDateInput.value.trim()
+        : "";
+
+    const transactionTime =
+      transactionTimeInput
+        ? transactionTimeInput.value.trim()
+        : "";
+
+    if (!transactionDate) {
+      const messageBox =
+        $("#receiptUploadMessage");
+
+      if (messageBox) {
+        messageBox.className =
+          "upload-message error";
+        messageBox.textContent =
+          "Please enter the payment transaction date.";
+      }
+
+      if (transactionDateInput) {
+        transactionDateInput.focus();
+      }
+
+      return;
+    }
+
+
+    const fileInput =
+      $("#receiptFile");
+
+    const messageBox =
+      $("#receiptUploadMessage");
+
+    const button =
+      $("#submitReceiptButton");
+
+    if (
+      !fileInput ||
+      !fileInput.files ||
+      !fileInput.files[0]
+    ) {
+      if (messageBox) {
+        messageBox.className =
+          "upload-message error";
+
+        messageBox.textContent =
+          "Please select your payment receipt first.";
+      }
+
+      return;
+    }
+
+    const file =
+      fileInput.files[0];
+
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "application/pdf"
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      if (messageBox) {
+        messageBox.className =
+          "upload-message error";
+
+        messageBox.textContent =
+          "Please upload a JPG, PNG, WEBP or PDF file.";
+      }
+
+      return;
+    }
+
+    if (
+      file.size >
+      5 * 1024 * 1024
+    ) {
+      if (messageBox) {
+        messageBox.className =
+          "upload-message error";
+
+        messageBox.textContent =
+          "The receipt must not be larger than 5 MB.";
+      }
+
+      return;
+    }
+
+    const reference =
+      currentReference ||
+      getSavedReference();
+
+    if (!reference) {
+      showStatusError(
+        "Your registration reference could not be found on this device."
+      );
+
+      return;
+    }
+
+    const formData =
+      new FormData();
+
+    formData.append(
+      "reference",
+      reference
+    );
+
+    formData.append(
+      "paymentTransactionDate",
+      transactionDate
+    );
+
+    if (transactionTime) {
+      formData.append(
+        "paymentTransactionTime",
+        transactionTime
+      );
+    }
+
+    formData.append(
+      "receipt",
+      file
+    );
+
+    if (button) {
+      button.disabled = true;
+      button.textContent =
+        "Uploading Receipt...";
+    }
+
+    if (messageBox) {
+      messageBox.className =
+        "upload-message";
+
+      messageBox.textContent =
+        "Uploading your receipt. Please wait...";
+    }
+
+    try {
+      const response =
+        await fetch(
+          "/api/upload-receipt",
+          {
+            method: "POST",
+            body: formData
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.message ||
+          "Receipt upload failed."
+        );
+      }
+
+      await loadRegistrationStatus(
+        reference,
+        true
+      );
+
+    } catch (error) {
+      console.error(
+        "Receipt upload error:",
+        error
+      );
+
+      if (messageBox) {
+        messageBox.className =
+          "upload-message error";
+
+        messageBox.textContent =
+          error.message ||
+          "Receipt upload failed. Please try again.";
+      }
+
+      if (button) {
+        button.disabled = false;
+        button.textContent =
+          "Submit Receipt for Verification";
+      }
+    }
+  }
+
+  /*
+======================================================
+  APPROVED WHATSAPP
+  ======================================================
+  */
+
+  async function openApprovedWhatsapp() {
+    const reference =
+      currentReference ||
+      getSavedReference();
+
+    if (!reference) return;
+
+    try {
+      const response =
+        await fetch(
+          `/api/registration-status?reference=${encodeURIComponent(
+            reference
+          )}`
+        );
+
+      const data =
+        await response.json();
+
+      if (
+        !response.ok ||
+        !data.success ||
+        data.registration.paymentStatus !==
+          "success"
+      ) {
+        alert(
+          "Your registration has not been approved yet."
+        );
+
+        return;
+      }
+
+      /*
+       * The status endpoint intentionally does not
+       * expose the actual WhatsApp URL.
+       *
+       * The secure approved-link endpoint will be
+       * added on the server side before launch.
+       */
+
+      const linkResponse =
+        await fetch(
+          `/api/approved-whatsapp?reference=${encodeURIComponent(
+            reference
+          )}`
+        );
+
+      const linkData =
+        await linkResponse.json();
+
+      if (
+        !linkResponse.ok ||
+        !linkData.success ||
+        !linkData.whatsappLink
+      ) {
+        throw new Error(
+          "The WhatsApp group link is not currently available."
+        );
+      }
+
+      window.open(
+        linkData.whatsappLink,
+        "_blank",
+        "noopener,noreferrer"
+      );
+
+    } catch (error) {
+      console.error(
+        "WhatsApp link error:",
+        error
+      );
+
+      alert(
+        error.message ||
+        "Unable to open the WhatsApp group."
+      );
+    }
+  }
+
+  /*
+  ======================================================
+  FORM SUBMISSION
+  ======================================================
+  */
+
+  async function handleRegistrationSubmit(
+    event
+  ) {
+    event.preventDefault();
+
+    if (!registrationForm) return;
+
+    const submitButton =
+      registrationForm.querySelector(
+        '[type="submit"]'
+      );
+
+    const formData =
+      new FormData(
+        registrationForm
+      );
+
+    const payload =
+      Object.fromEntries(
+        formData.entries()
+      );
+
+    if (submitButton) {
+      submitButton.disabled = true;
+
+      submitButton.dataset.originalText =
+        submitButton.textContent;
+
+      submitButton.textContent =
+        "Saving Registration...";
+    }
+
+    try {
+      const response =
+        await fetch(
+          "/api/register",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+              Accept:
+                "application/json"
+            },
+            body:
+              JSON.stringify(payload)
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.message ||
+          "Registration could not be completed."
+        );
+      }
+
+      const reference =
+        data.registration &&
+        data.registration.reference;
+
+      if (!reference) {
+        throw new Error(
+          "Registration was saved but no reference was returned."
+        );
+      }
+
+      saveReference(reference);
+
+      hideRegistrationForm();
+
+      await loadRegistrationStatus(
+        reference,
+        true
+      );
+
+    } catch (error) {
+      console.error(
+        "Registration error:",
+        error
+      );
+
+      showFormMessage(
+        error.message ||
+        "Unable to complete registration. Please try again.",
+        "error"
+      );
+
+    } finally {
+      if (submitButton) {
+        submitButton.disabled = false;
+
+        submitButton.textContent =
+          submitButton.dataset.originalText ||
+          "Submit Registration";
+      }
+    }
+  }
+
+  /*
+  ======================================================
+  EXISTING REGISTRATION DETECTION
+  ======================================================
+  */
+
+  async function checkSavedRegistration() {
+    const savedReference =
+      getSavedReference();
+
+    if (!savedReference) {
+      return;
+    }
+
+    currentReference =
+      savedReference;
+
+    await loadRegistrationStatus(
+      savedReference,
+      false
+    );
+  }
+
+  /*
+  ======================================================
+  BEGIN REGISTRATION BUTTONS
+  ======================================================
+  */
+
+  function attachBeginButtons() {
+    document
+      .querySelectorAll(
+        "[data-begin-registration], .begin-registration, #beginRegistration"
+      )
+      .forEach((button) => {
+        button.addEventListener(
+          "click",
+          async (event) => {
+            event.preventDefault();
+
+            const savedReference =
+              getSavedReference();
+
+            if (savedReference) {
+              await loadRegistrationStatus(
+                savedReference,
+                true
+              );
+            } else {
+              showRegistrationForm();
+
+              const target =
+                registrationForm ||
+                document.querySelector(
+                  ".registration"
+                );
+
+              if (target) {
+                target.scrollIntoView({
+                  behavior: "smooth"
+                });
+              }
+            }
+          }
+        );
+      });
+  }
+
+  /*
+  ======================================================
+  INITIALISE
+  ======================================================
+  */
+
+  function init() {
+    if (registrationForm) {
+      registrationForm.addEventListener(
+        "submit",
+        handleRegistrationSubmit
+      );
+    }
+
+    attachBeginButtons();
+
+    checkSavedRegistration();
+  }
+if (
+    document.readyState ===
+    "loading"
+  ) {
+    document.addEventListener(
+      "DOMContentLoaded",
+      init
+    );
+  } else {
+    init();
+  }
+
+})();

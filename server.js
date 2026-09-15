@@ -4,58 +4,256 @@ const express = require("express");
 const path = require("path");
 const crypto = require("crypto");
 const axios = require("axios");
-const nodemailer = require("nodemailer");
 
 const {
   hasReachedLimit,
+  getRegistrationClosureStatus,
   hasReachedUnitLimit,
   addRegistration,
   findByReference,
   updateRegistration,
-  clearAllRegistrations
+  getPendingVerificationRegistrations,
+  clearAllRegistrations,
+  generateParticipantReference,
+  invalidateSuccessfulRegistrationsCache
 } = require("./registration-store");
+
+
+const multer = require("multer");
+
+/*
+==================================================
+RECEIPT UPLOAD CONFIGURATION
+==================================================
+Receipts are kept in the private Supabase Storage
+bucket named "receipts".
+*/
+
+const RECEIPT_BUCKET = "receipts";
+
+const ALLOWED_RECEIPT_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf"
+]);
+
+const receiptUpload = multer({
+  storage: multer.memoryStorage(),
+
+  limits: {
+    fileSize: 5 * 1024 * 1024
+  },
+
+  fileFilter: (req, file, callback) => {
+    if (!ALLOWED_RECEIPT_TYPES.has(file.mimetype)) {
+      return callback(
+        new Error(
+          "Receipt must be JPG, PNG, WEBP, or PDF."
+        )
+      );
+    }
+
+    callback(null, true);
+  }
+});
+
+/*
+==================================================
+SUPABASE SERVER CLIENT
+==================================================
+The service-role key stays server-side.
+It is NEVER sent to participants.
+*/
+
+let supabaseClient = null;
+
+function getSupabaseClient() {
+  if (supabaseClient) {
+    return supabaseClient;
+  }
+
+  const { createClient } =
+    require("@supabase/supabase-js");
+
+  if (
+    !process.env.SUPABASE_URL ||
+    !process.env.SUPABASE_SERVICE_ROLE_KEY
+  ) {
+    throw new Error(
+      "Supabase server configuration is missing."
+    );
+  }
+
+  supabaseClient = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    }
+  );
+
+  return supabaseClient;
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const REGISTRATION_AMOUNT = 380000;
 
-const mailer =
-  process.env.SMTP_USER && process.env.SMTP_PASS
-    ? nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS
-        }
-      })
-    : null;
+/*
+==================================================
+CONFIGURATION
+==================================================
+All changeable registration/payment details come
+from .env. Do not hard-code them here.
+*/
 
-async function sendAdminRegistrationEmail(registration, payment) {
-  const recipients = process.env.NOTIFICATION_EMAILS
-    ? process.env.NOTIFICATION_EMAILS
-        .split(",")
-        .map(email => email.trim())
-        .filter(Boolean)
-    : process.env.NOTIFICATION_EMAIL
-      ? [process.env.NOTIFICATION_EMAIL]
-      : [];
+const REGISTRATION_AMOUNT = Number(
+  process.env.PAYMENT_AMOUNT || 3800
+);
 
-  if (!mailer || recipients.length === 0) {
-    console.log("Admin email notification skipped: SMTP not configured.");
-    return;
+const PAYMENT_CONFIG = {
+  amount: REGISTRATION_AMOUNT,
+  method: process.env.PAYMENT_METHOD || "Bank Transfer",
+  accountName: process.env.PAYMENT_ACCOUNT_NAME || "",
+  accountNumber: process.env.PAYMENT_ACCOUNT_NUMBER || "",
+  instructions:
+    process.env.PAYMENT_INSTRUCTIONS ||
+    "Please pay the registration fee and upload your receipt for verification.",
+  whatsappGroupLink:
+    process.env.WHATSAPP_GROUP_LINK || ""
+};
+
+/*
+==================================================
+BREVO EMAIL
+==================================================
+Transactional email is sent through Brevo API.
+The Brevo API key stays server-side in .env.
+*/
+
+const BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";
+
+const BREVO_SENDER_EMAIL =
+  process.env.BREVO_SENDER_EMAIL ||
+  "jubalstar001@gmail.com";
+
+const BREVO_SENDER_NAME =
+  process.env.BREVO_SENDER_NAME ||
+  "CMDA-UUTH Rural Outreach";
+
+async function sendBrevoEmail({
+  to,
+  subject,
+  text
+}) {
+  const recipients = Array.isArray(to)
+    ? to.filter(Boolean)
+    : [to].filter(Boolean);
+
+  if (!process.env.BREVO_API_KEY) {
+    console.log(
+      "Email skipped: BREVO_API_KEY is not configured."
+    );
+    return false;
   }
 
-  await mailer.sendMail({
-    from: `"CMDA-UUTH Rural Outreach" <${process.env.SMTP_USER}>`,
+  if (recipients.length === 0) {
+    console.log(
+      "Email skipped: no recipients configured."
+    );
+    return false;
+  }
+
+  try {
+    await axios.post(
+      BREVO_API_URL,
+      {
+        sender: {
+          name: BREVO_SENDER_NAME,
+          email: BREVO_SENDER_EMAIL
+        },
+        to: recipients.map(email => ({
+          email
+        })),
+        subject,
+        text
+      },
+      {
+        headers: {
+          "accept": "application/json",
+          "api-key": process.env.BREVO_API_KEY,
+          "content-type": "application/json"
+        }
+      }
+    );
+
+    return true;
+  } catch (error) {
+    console.error(
+      "Brevo email error:",
+      error.response?.data || error.message
+    );
+
+    return false;
+  }
+}
+
+/*
+==================================================
+ADMIN EMAIL CONFIGURATION
+==================================================
+These recipients are intentionally configurable.
+Roles and permissions will be handled separately.
+*/
+
+function getEmailList(value) {
+  return (value || "")
+    .split(",")
+    .map(email => email.trim())
+    .filter(Boolean);
+}
+
+function getFinanceEmails() {
+  return getEmailList(process.env.FINANCE_EMAILS);
+}
+
+function getAssistantRegistrationHeadEmails() {
+  return getEmailList(
+    process.env.ASSISTANT_REGISTRATION_HEAD_EMAIL
+  );
+}
+
+function getRegistrationUnitHeadEmails() {
+  return getEmailList(
+    process.env.REGISTRATION_UNIT_HEAD_EMAIL
+  );
+}
+
+/*
+==================================================
+EMAIL: RECEIPT SUBMITTED
+==================================================
+Only Finance receives this notification.
+*/
+
+async function sendReceiptSubmittedEmail(registration) {
+  const recipients = getFinanceEmails();
+
+  return sendBrevoEmail({
     to: recipients,
-    subject: `New Paid Registration — ${registration.fullName}`,
+    subject:
+      `Payment Receipt Submitted — ${registration.reference}`,
     text: `
-A new CMDA-UUTH Rural Outreach 2026 registration has been successfully paid.
+A participant has submitted a payment receipt for Finance verification.
+
+Registration Reference: ${registration.reference}
 
 Name: ${registration.fullName}
 Phone: ${registration.phone}
 Email: ${registration.email}
-Gender: ${registration.gender}
 
 Institution: ${registration.institution}
 Level: ${registration.level}
@@ -66,110 +264,140 @@ CMDA Member: ${registration.cmda}
 Previous Rural Outreach: ${registration.previousOutreach}
 Unit: ${registration.unit}
 
-Registration Fee: ₦3,800
-Payment Reference: ${registration.reference}
-Payment Channel: ${payment.channel || "N/A"}
-Payment Status: SUCCESS
-Paid At: ${payment.paid_at || new Date().toISOString()}
+Registration Fee: ₦${REGISTRATION_AMOUNT.toLocaleString()}
+Payment Status: RECEIPT SUBMITTED
+
+Please log in to the Finance/Admin dashboard to review the receipt and verify the actual payment.
 `
   });
 }
 
-async function sendParticipantConfirmationEmail(registration, payment) {
-  if (!mailer || !registration.email) {
-    console.log("Participant confirmation email skipped: SMTP not configured.");
-    return;
-  }
+/*
+==================================================
+EMAIL: SUCCESSFUL REGISTRATION
+==================================================
+Sent to:
+- Participant
+- Assistant Registration Unit Head
+- Registration Unit Head
+==================================================
+*/
 
-  await mailer.sendMail({
-    from: `"CMDA-UUTH Rural Outreach" <${process.env.SMTP_USER}>`,
-    to: registration.email,
-    subject: "CMDA-UUTH Rural Outreach 2026 — Registration Successful",
-    text: `
+async function sendSuccessfulRegistrationEmails(registration) {
+  const participantEmail = registration.email;
+
+  const adminRecipients = [
+    ...getAssistantRegistrationHeadEmails(),
+    ...getRegistrationUnitHeadEmails()
+  ];
+
+  const participantText = `
 Dear ${registration.fullName},
 
-Your registration for the CMDA-UUTH Chapter Rural Outreach 2026 has been successfully completed.
+Your registration for the CMDA-UUTH Chapter Rural Outreach 2026 has been successfully confirmed.
 
 Registration details:
 
 Name: ${registration.fullName}
+Registration Reference: ${registration.reference}
 Unit: ${registration.unit}
 Institution: ${registration.institution}
 Level: ${registration.level}
 
-Payment: ₦3,800
-Payment Reference: ${registration.reference}
-Payment Status: SUCCESS
-Paid At: ${payment.paid_at || new Date().toISOString()}
+Payment: ₦${REGISTRATION_AMOUNT.toLocaleString()}
+Payment Status: VERIFIED
 
-Your payment has been successfully verified by Paystack, and your registration is confirmed.
+Your payment has been manually verified by the Finance Administrator, and your registration is now confirmed.
+
+WhatsApp Group:
+${PAYMENT_CONFIG.whatsappGroupLink}
 
 Please keep this email for your records.
 
 Thank you,
 CMDA-UUTH Chapter
 Rural Outreach 2026
-`
-  });
+`;
+
+  const adminText = `
+A registration has been successfully confirmed after Finance verification.
+
+Registration Reference: ${registration.reference}
+
+Name: ${registration.fullName}
+Phone: ${registration.phone}
+Email: ${registration.email}
+
+Institution: ${registration.institution}
+Level: ${registration.level}
+Faculty: ${registration.faculty}
+Department: ${registration.department}
+
+CMDA Member: ${registration.cmda}
+Previous Rural Outreach: ${registration.previousOutreach}
+Unit: ${registration.unit}
+
+Registration Fee: ₦${REGISTRATION_AMOUNT.toLocaleString()}
+Payment Status: VERIFIED
+Verified At: ${registration.verifiedAt || new Date().toISOString()}
+Verified By: ${registration.verifiedBy || "Finance Administrator"}
+`;
+
+  await Promise.all([
+    sendBrevoEmail({
+      to: participantEmail,
+      subject:
+        "CMDA-UUTH Rural Outreach 2026 — Registration Confirmed",
+      text: participantText
+    }),
+
+    sendBrevoEmail({
+      to: adminRecipients,
+      subject:
+        `Registration Confirmed — ${registration.reference}`,
+      text: adminText
+    })
+  ]);
 }
 
-async function completePayment(reference, payment) {
-  const registration = await findByReference(reference);
+/*
+==================================================
+EMAIL: PAYMENT REJECTED
+==================================================
+Only the participant is notified.
+*/
 
-  if (!registration) {
-    return {
-      success: false,
-      reason: "registration_not_found"
-    };
-  }
+async function sendPaymentRejectedEmail(
+  registration
+) {
+  const reason =
+    registration.rejectionReason ||
+    "The submitted payment could not be verified.";
 
-  if (
-    payment.status !== "success" ||
-    payment.reference !== reference ||
-    payment.amount !== REGISTRATION_AMOUNT ||
-    payment.currency !== "NGN" ||
-    payment.customer?.email?.toLowerCase() !== registration.email
-  ) {
-    return {
-      success: false,
-      reason: "payment_validation_failed"
-    };
-  }
+  return sendBrevoEmail({
+    to: registration.email,
+    subject:
+      "CMDA-UUTH Rural Outreach 2026 — Payment Verification Update",
+    text: `
+Dear ${registration.fullName},
 
-  if (registration.paymentStatus === "success") {
-    return {
-      success: true,
-      registration,
-      alreadyCompleted: true
-    };
-  }
+Your submitted payment receipt for the CMDA-UUTH Chapter Rural Outreach 2026 could not be verified at this time.
 
-  const updated = await updateRegistration(registration.id, {
-    paymentStatus: "success",
-    paidAt: payment.paid_at || new Date().toISOString(),
-    paymentChannel: payment.channel || null,
-    paystackTransactionId: payment.id,
-    paymentReference: payment.reference,
-    paymentAmount: payment.amount,
-    paymentCurrency: payment.currency
+Registration Reference: ${registration.reference}
+Unit: ${registration.unit}
+
+Reason:
+${reason}
+
+Please review the payment details and follow the instructions on the registration status page to take the required action.
+
+Your registration is not confirmed at this stage.
+
+Thank you,
+CMDA-UUTH Chapter
+Rural Outreach 2026
+`
   });
-
-  try {
-    await Promise.all([
-      sendAdminRegistrationEmail(updated, payment),
-      sendParticipantConfirmationEmail(updated, payment)
-    ]);
-  } catch (error) {
-    console.error(
-      "Registration notification email failed:",
-      error.message
-    );
-  }
-
-  return {
-    success: true,
-    registration: updated
-  };
 }
 
 app.use(
@@ -188,14 +416,95 @@ app.use(express.static(path.join(__dirname, "public-static")));
 // Registration form
 app.use("/registration", express.static(path.join(__dirname, "public")));
 
-app.get("/admin", requireAdmin, (req, res) => {
+app.get("/admin", (req, res) => {
   res.sendFile(path.join(__dirname, "private-admin", "index.html"));
 });
 
-app.get("/api/registration-status", async (req, res) => {
+
+/*
+==================================================
+APPROVED WHATSAPP ACCESS
+==================================================
+The WhatsApp link is only returned after Finance
+has actually approved the registration.
+The link itself comes from WHATSAPP_GROUP_LINK
+in .env and is never hard-coded here.
+*/
+
+app.get("/api/approved-whatsapp", async (req, res) => {
+  try {
+    const reference =
+      String(req.query.reference || "").trim();
+
+    if (!reference) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Registration reference is required."
+      });
+    }
+
+    const registration =
+      await findByReference(reference);
+
+    if (!registration) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Registration could not be found."
+      });
+    }
+
+    if (
+      registration.paymentStatus !== "success"
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Your registration has not been approved yet."
+      });
+    }
+
+    if (!PAYMENT_CONFIG.whatsappGroupLink) {
+      console.error(
+        "WHATSAPP_GROUP_LINK is not configured."
+      );
+
+      return res.status(503).json({
+        success: false,
+        message:
+          "The WhatsApp group link is currently unavailable."
+      });
+    }
+
+    return res.json({
+      success: true,
+      whatsappLink:
+        PAYMENT_CONFIG.whatsappGroupLink
+    });
+
+  } catch (error) {
+    console.error(
+      "Approved WhatsApp error:",
+      error.message
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Unable to retrieve the WhatsApp group link."
+    });
+  }
+});
+
+app.get("/api/registration-status", async (req, res, next) => {
+  if (String(req.query.reference || "").trim()) {
+    return next();
+  }
+
   try {
     res.json({
-      open: !(await hasReachedLimit()).reached
+      open: (await getRegistrationClosureStatus()).open
     });
   } catch (error) {
     console.error("Registration status error:", error.message);
@@ -209,40 +518,535 @@ app.get("/api/registration-status", async (req, res) => {
 
 
 
-function requireAdmin(req, res, next) {
-  const auth = req.headers.authorization || "";
+/*
+==================================================
+ROLE-BASED ADMIN AUTHENTICATION
+==================================================
+No browser Basic Auth popup.
 
-  if (!auth.startsWith("Basic ")) {
-    res.set("WWW-Authenticate", 'Basic realm="CMDA Outreach Admin"');
-    return res.status(401).send("Admin login required.");
+Roles:
+- finance
+- assistant_registration_head
+- registration_head
+
+Credentials are controlled through .env.
+==================================================
+*/
+
+const ADMIN_SESSION_TTL = Number(
+  process.env.ADMIN_SESSION_TTL || 8 * 60 * 60 * 1000
+);
+
+const ADMIN_USERNAME =
+  process.env.ADMIN_USERNAME || "admin";
+
+const ADMIN_PASSWORD =
+  process.env.ADMIN_PASSWORD || "";
+
+const FINANCE_VERIFICATION_PIN =
+  process.env.FINANCE_VERIFICATION_PIN || "";
+
+const adminSessions = new Map();
+
+function getAdminRole(username, password) {
+  if (
+    username === ADMIN_USERNAME &&
+    password === ADMIN_PASSWORD
+  ) {
+    return "admin";
   }
 
-  const decoded = Buffer.from(auth.slice(6), "base64").toString("utf8");
-  const separator = decoded.indexOf(":");
+  return null;
+}
 
-  if (separator === -1) {
-    res.set("WWW-Authenticate", 'Basic realm="CMDA Outreach Admin"');
-    return res.status(401).send("Invalid admin credentials.");
+function createAdminSession(role, username) {
+  const token =
+    crypto.randomBytes(32).toString("hex");
+
+  adminSessions.set(token, {
+    role,
+    username,
+    createdAt: Date.now(),
+    expiresAt:
+      Date.now() + ADMIN_SESSION_TTL
+  });
+
+  return token;
+}
+
+function getAdminSession(req) {
+  const cookies =
+    String(req.headers.cookie || "");
+
+  const match =
+    cookies.match(
+      /(?:^|;\\s*)cmda_admin_session=([^;]+)/
+    );
+
+  if (!match) {
+    return null;
   }
 
-  const username = decoded.slice(0, separator);
-  const password = decoded.slice(separator + 1);
+  const token = match[1];
+
+  const session =
+    adminSessions.get(token);
+
+  if (!session) {
+    return null;
+  }
 
   if (
-    username !== process.env.ADMIN_USERNAME ||
-    password !== process.env.ADMIN_PASSWORD
+    Date.now() > session.expiresAt
   ) {
-    res.set("WWW-Authenticate", 'Basic realm="CMDA Outreach Admin"');
-    return res.status(401).send("Invalid admin credentials.");
+    adminSessions.delete(token);
+    return null;
   }
+
+  return {
+    token,
+    ...session
+  };
+}
+
+function setAdminSessionCookie(res, token) {
+  const secure =
+    process.env.NODE_ENV === "production"
+      ? "; Secure"
+      : "";
+
+  res.setHeader(
+    "Set-Cookie",
+    [
+      "cmda_admin_session=" + token,
+      "HttpOnly",
+      "Path=/",
+      "SameSite=Lax",
+      "Max-Age=" +
+        Math.floor(
+          ADMIN_SESSION_TTL / 1000
+        ),
+      secure
+    ]
+      .filter(Boolean)
+      .join("; ")
+  );
+}
+
+function clearAdminSessionCookie(res) {
+  res.setHeader(
+    "Set-Cookie",
+    "cmda_admin_session=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0"
+  );
+}
+
+function requireAdmin(req, res, next) {
+  const session =
+    getAdminSession(req);
+
+  if (!session) {
+    return res.status(401).json({
+      success: false,
+      message: "Admin authentication required."
+    });
+  }
+
+  req.admin = {
+    role: session.role,
+    username: session.username
+  };
 
   next();
 }
 
+function requireAdminRole(...allowedRoles) {
+  return (req, res, next) => {
+    const session =
+      getAdminSession(req);
+
+    if (!session) {
+      return res.status(401).json({
+        success: false,
+        message: "Admin authentication required."
+      });
+    }
+
+    if (
+      !allowedRoles.includes(
+        session.role
+      )
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You do not have permission to perform this action."
+      });
+    }
+
+    req.admin = {
+      role: session.role,
+      username: session.username
+    };
+
+    next();
+  };
+}
+
+/*
+==================================================
+ADMIN LOGIN
+==================================================
+*/
+
+app.post("/api/admin/login", (req, res) => {
+  const username =
+    String(req.body.username || "").trim();
+
+  const password =
+    String(req.body.password || "");
+
+  if (!username || !password) {
+    return res.status(400).json({
+      success: false,
+      message:
+        "Username and password are required."
+    });
+  }
+
+  const role =
+    getAdminRole(
+      username,
+      password
+    );
+
+  if (!role) {
+    return res.status(401).json({
+      success: false,
+      message:
+        "Invalid username or password."
+    });
+  }
+
+  const token =
+    createAdminSession(
+      role,
+      username
+    );
+
+  setAdminSessionCookie(
+    res,
+    token
+  );
+
+  res.json({
+    success: true,
+    role,
+    username
+  });
+});
+
+/*
+==================================================
+ADMIN SESSION
+==================================================
+*/
+
+app.get("/api/admin/me", (req, res) => {
+  const session =
+    getAdminSession(req);
+
+  if (!session) {
+    return res.status(401).json({
+      success: false,
+      authenticated: false
+    });
+  }
+
+  res.json({
+    success: true,
+    authenticated: true,
+    role: session.role,
+    username: session.username
+  });
+});
+
+/*
+==================================================
+ADMIN LOGOUT
+==================================================
+*/
+
+app.post("/api/admin/logout", (req, res) => {
+  const session =
+    getAdminSession(req);
+
+  if (session) {
+    adminSessions.delete(
+      session.token
+    );
+  }
+
+  clearAdminSessionCookie(res);
+
+  res.json({
+    success: true
+  });
+  });
+
+
+
+
+function requireFinancePin(req, res) {
+  const pin = String(req.body?.pin || req.query?.pin || "");
+
+  if (!FINANCE_VERIFICATION_PIN || pin !== FINANCE_VERIFICATION_PIN) {
+    res.status(403).json({
+      success: false,
+      message: "Finance verification required."
+    });
+    return false;
+  }
+
+  return true;
+}
+
+app.get("/api/admin/pending-verifications", requireAdmin, async (req, res) => {
+  try {
+    if (!requireFinancePin(req, res)) return;
+
+    const pending = await getPendingVerificationRegistrations();
+
+    const grouped = {};
+
+    for (const registration of pending) {
+      const unit = registration.unit || "Unassigned";
+
+      if (!grouped[unit]) grouped[unit] = [];
+
+      grouped[unit].push({
+        reference: registration.reference,
+        fullName: registration.fullName,
+        email: registration.email,
+        phone: registration.phone,
+        department: registration.department,
+        level: registration.level,
+        amount: registration.amount,
+        paymentTransactionAt: registration.paymentTransactionAt || null,
+        receiptUploadedAt: registration.receiptUploadedAt || null
+      });
+    }
+
+    res.json({
+      success: true,
+      units: grouped,
+      count: pending.length
+    });
+  } catch (error) {
+    console.error("Pending verification error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Unable to load pending payments."
+    });
+  }
+});
+
+app.get("/api/admin/receipt/:reference", requireAdmin, async (req, res) => {
+  try {
+    if (!requireFinancePin(req, res)) return;
+
+    const registration = await findByReference(
+      String(req.params.reference || "").trim()
+    );
+
+    if (!registration || !registration.receiptPath) {
+      return res.status(404).json({
+        success: false,
+        message: "Receipt not found."
+      });
+    }
+
+    const { data, error } = await getSupabaseClient()
+      .storage
+      .from(RECEIPT_BUCKET)
+      .createSignedUrl(registration.receiptPath, 300);
+
+    if (error || !data?.signedUrl) {
+      throw error || new Error("Unable to create receipt URL.");
+    }
+
+    res.json({
+      success: true,
+      url: data.signedUrl
+    });
+  } catch (error) {
+    console.error("Receipt view error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Unable to open receipt."
+    });
+  }
+});
+
+app.post("/api/admin/registrations/:reference/approve", requireAdmin, async (req, res) => {
+  try {
+    if (!requireFinancePin(req, res)) return;
+
+    const registration = await findByReference(
+      String(req.params.reference || "").trim()
+    );
+
+    if (!registration) {
+      return res.status(404).json({
+        success: false,
+        message: "Registration not found."
+      });
+    }
+
+    if (registration.paymentStatus !== "receipt_submitted") {
+      return res.status(400).json({
+        success: false,
+        message: "This registration is not awaiting Finance verification."
+      });
+    }
+
+    let updated;
+    let lastReferenceError;
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const officialReference =
+          await generateParticipantReference(registration.unit);
+
+        updated = await updateRegistration(registration.id, {
+          reference: officialReference,
+          paymentStatus: "success",
+          paymentReference: officialReference,
+          paymentAmount: registration.amount,
+          paymentCurrency: "NGN",
+          paymentChannel: PAYMENT_CONFIG.method,
+          verifiedAt: new Date().toISOString(),
+          verifiedBy: "Finance",
+          rejectionReason: null
+        });
+
+        break;
+      } catch (error) {
+        lastReferenceError = error;
+
+        if (error?.code !== "23505" || attempt === 2) {
+          throw error;
+        }
+      }
+    }
+
+    if (!updated) {
+      throw lastReferenceError || new Error("Unable to assign CURO reference."); 
+    }
+
+    invalidateSuccessfulRegistrationsCache();
+
+    await sendSuccessfulRegistrationEmails(updated);
+
+    res.json({
+      success: true,
+      registration: {
+        reference: updated.reference,
+        paymentStatus: updated.paymentStatus
+      }
+    });
+  } catch (error) {
+    console.error("Payment approval error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Unable to approve payment."
+    });
+  }
+});
+
+app.post("/api/admin/registrations/:reference/reject", requireAdmin, async (req, res) => {
+  try {
+    if (!requireFinancePin(req, res)) return;
+
+    const reason = String(req.body?.reason || "").trim();
+
+    if (!reason) {
+      return res.status(400).json({
+        success: false,
+        message: "A rejection reason is required."
+      });
+    }
+
+    const registration = await findByReference(
+      String(req.params.reference || "").trim()
+    );
+
+    if (!registration) {
+      return res.status(404).json({
+        success: false,
+        message: "Registration not found."
+      });
+    }
+
+    if (registration.paymentStatus !== "receipt_submitted") {
+      return res.status(400).json({
+        success: false,
+        message: "This registration is not awaiting Finance verification."
+      });
+    }
+
+    const updated = await updateRegistration(registration.id, {
+      paymentStatus: "rejected",
+      rejectionReason: reason,
+      verifiedAt: null,
+      verifiedBy: null
+    });
+
+    await sendPaymentRejectedEmail(updated);
+
+    res.json({
+      success: true,
+      registration: {
+        reference: updated.reference,
+        paymentStatus: updated.paymentStatus
+      }
+    });
+  } catch (error) {
+    console.error("Payment rejection error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Unable to reject payment."
+    });
+  }
+});
+
 app.post("/api/admin/reset", requireAdmin, async (req, res) => {
+  const session = getAdminSession(req);
+  const resetUsername = process.env.ADMIN_RESET_USERNAME;
+  const resetPassword = process.env.ADMIN_RESET_PASSWORD;
+  const suppliedPassword = String(req.body?.password || "");
+
+  if (!session || !resetUsername || session.username !== resetUsername) {
+    return res.status(403).json({
+      success: false,
+      message: "Only the authorized registration administrator can reset registrations."
+    });
+  }
+
+  if (process.env.ADMIN_RESET_ENABLED !== "true") {
+    return res.status(403).json({
+      success: false,
+      message: "Admin reset is disabled."
+    });
+  }
+
+  if (!resetPassword || suppliedPassword !== resetPassword) {
+    return res.status(403).json({
+      success: false,
+      message: "Invalid reset password."
+    });
+  }
+
   try {
     await clearAllRegistrations();
-
     res.json({
       success: true,
       message: "All registration records have been cleared."
@@ -268,7 +1072,19 @@ app.get("/api/admin/stats", requireAdmin, async (req, res) => {
     } = require("./registration-store");
 
     const registrations = await getSuccessfulRegistrations();
-    const overall = await hasReachedLimit();
+
+    const overallCount = registrations.length;
+    const overallRemaining = Math.max(
+      MAX_REGISTRATIONS - overallCount,
+      0
+    );
+
+    const overall = {
+      count: overallCount,
+      limit: MAX_REGISTRATIONS,
+      remaining: overallRemaining,
+      reached: overallRemaining === 0
+    };
 
     const units = {};
 
@@ -276,9 +1092,12 @@ app.get("/api/admin/stats", requireAdmin, async (req, res) => {
       const members = registrations
         .filter(registration => registration.unit === unit)
         .map(registration => ({
+          reference: registration.reference,
           name: registration.fullName,
           department: registration.department,
-          level: registration.level
+          level: registration.level,
+          email: registration.email,
+          phone: registration.phone
         }));
 
       const count = members.length;
@@ -309,7 +1128,7 @@ app.get("/api/admin/stats", requireAdmin, async (req, res) => {
       updatedAt: new Date().toISOString()
     });
   } catch (error) {
-    console.error("Admin stats error:", error.message);
+    console.error("Admin stats error:", error);
 
     res.status(500).json({
       success: false,
@@ -318,9 +1137,314 @@ app.get("/api/admin/stats", requireAdmin, async (req, res) => {
   }
 });
 
+
+/*
+==================================================
+PARTICIPANT: SUBMIT PAYMENT RECEIPT
+==================================================
+Uploading a receipt does NOT confirm payment.
+
+The registration remains pending until Finance
+manually verifies the actual transaction.
+*/
+
+
+/*
+==================================================
+PARTICIPANT: REGISTRATION STATUS
+==================================================
+Only participant-safe information is returned.
+Receipt storage paths and admin information are
+never exposed here.
+*/
+
+app.get("/api/registration-status", async (req, res) => {
+  try {
+    const reference =
+      String(req.query.reference || "").trim();
+
+    if (!reference) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Registration reference is required."
+      });
+    }
+
+    const registration =
+      await findByReference(reference);
+
+    if (!registration) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Registration could not be found."
+      });
+    }
+
+    const status =
+      registration.paymentStatus || "pending";
+
+    res.json({
+      success: true,
+
+      registration: {
+        reference:
+          registration.reference,
+
+        fullName:
+          registration.fullName,
+
+        unit:
+          registration.unit,
+
+        createdAt:
+          registration.createdAt,
+
+        paymentStatus:
+          status,
+
+        receiptUploadedAt:
+          registration.receiptUploadedAt,
+
+        rejectionReason:
+          registration.rejectionReason || null,
+
+        verifiedAt:
+          registration.verifiedAt || null
+      },
+
+      payment: {
+        amount:
+          PAYMENT_CONFIG.amount,
+
+        method:
+          PAYMENT_CONFIG.method,
+
+        accountName:
+          PAYMENT_CONFIG.accountName,
+
+        accountNumber:
+          PAYMENT_CONFIG.accountNumber,
+
+        instructions:
+          PAYMENT_CONFIG.instructions
+      },
+
+      whatsappAvailable:
+        status === "success" &&
+        Boolean(
+          PAYMENT_CONFIG.whatsappGroupLink
+        )
+    });
+
+  } catch (error) {
+    console.error(
+      "Registration status error:",
+      error.message
+    );
+
+    res.status(500).json({
+      success: false,
+      message:
+        "Unable to load registration status."
+    });
+  }
+});
+
+app.post(
+  "/api/upload-receipt",
+  receiptUpload.single("receipt"),
+  async (req, res) => {
+    try {
+      const reference =
+        String(req.body.reference || "").trim();
+
+      const paymentTransactionDate =
+        String(
+          req.body.paymentTransactionDate || ""
+        ).trim();
+
+      const paymentTransactionTime =
+        String(
+          req.body.paymentTransactionTime || ""
+        ).trim();
+
+      if (!paymentTransactionDate) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Payment transaction date is required."
+        });
+      }
+
+      const paymentTransactionAt =
+        paymentTransactionTime
+          ? `${paymentTransactionDate}T${paymentTransactionTime}:00`
+          : paymentTransactionDate;
+
+      if (!reference) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Registration reference is required."
+        });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Please select your payment receipt."
+        });
+      }
+
+      const registration =
+        await findByReference(reference);
+
+      if (!registration) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Registration could not be found."
+        });
+      }
+
+      if (
+        registration.paymentStatus === "success"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "This registration has already been confirmed."
+        });
+      }
+
+      if (
+        registration.paymentStatus ===
+        "receipt_submitted"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "A receipt has already been submitted and is awaiting Finance verification."
+        });
+      }
+
+      const supabase = getSupabaseClient();
+
+      const extension =
+        req.file.mimetype === "application/pdf"
+          ? "pdf"
+          : req.file.mimetype === "image/png"
+            ? "png"
+            : req.file.mimetype === "image/webp"
+              ? "webp"
+              : "jpg";
+
+      const storagePath =
+        `${registration.id}/receipt-${Date.now()}.${extension}`;
+
+      const { error: uploadError } =
+        await supabase.storage
+          .from(RECEIPT_BUCKET)
+          .upload(
+            storagePath,
+            req.file.buffer,
+            {
+              contentType: req.file.mimetype,
+              upsert: false
+            }
+          );
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const updated =
+        await updateRegistration(
+          registration.id,
+          {
+            paymentStatus:
+              "receipt_submitted",
+
+            receiptPath:
+              storagePath,
+
+            receiptUploadedAt:
+              new Date().toISOString(),
+
+            paymentTransactionAt:
+              paymentTransactionAt,
+
+            rejectionReason: null
+          }
+        );
+
+      /*
+      Finance is notified immediately.
+      The participant is NOT told that payment
+      was successful.
+      */
+
+      try {
+        await sendReceiptSubmittedEmail(
+          updated
+        );
+      } catch (emailError) {
+        console.error(
+          "Receipt notification email failed:",
+          emailError.message
+        );
+      }
+
+      res.json({
+        success: true,
+
+        registration: {
+          reference: updated.reference,
+          fullName: updated.fullName,
+          unit: updated.unit,
+          paymentStatus:
+            updated.paymentStatus,
+          receiptUploadedAt:
+            updated.receiptUploadedAt
+        },
+
+        message:
+          "Your receipt has been submitted successfully and is now awaiting Finance verification."
+      });
+
+    } catch (error) {
+      console.error(
+        "Receipt upload error:",
+        error.message
+      );
+
+      res.status(500).json({
+        success: false,
+        message:
+          error.message ||
+          "Unable to upload receipt. Please try again."
+      });
+    }
+  }
+);
+
 app.post("/api/register", async (req, res) => {
   try {
-    if ((await hasReachedLimit()).reached) {
+    /*
+    ================================================
+    CAPACITY CHECK
+    ================================================
+    Only successful/verified registrations count
+    toward the registration and unit limits.
+    */
+
+    const closureStatus =
+      await getRegistrationClosureStatus();
+
+    if (!closureStatus.open) {
       return res.status(403).json({
         success: false,
         message: "Registration is currently closed."
@@ -341,6 +1465,12 @@ app.post("/api/register", async (req, res) => {
       unit
     } = req.body;
 
+    /*
+    ================================================
+    REQUIRED FIELDS
+    ================================================
+    */
+
     if (
       !fullName ||
       !phone ||
@@ -360,286 +1490,119 @@ app.post("/api/register", async (req, res) => {
       });
     }
 
+    /*
+    ================================================
+    UNIT CAPACITY CHECK
+    ================================================
+    */
 
     const unitLimit = await hasReachedUnitLimit(unit);
 
     if (unitLimit.reached) {
       return res.status(403).json({
         success: false,
-        message: `${unit} is already full. Please select another unit.`
+        message:
+          `${unit} is already full. Please select another unit.`
       });
     }
 
-    if (!process.env.PAYSTACK_SECRET_KEY) {
-      return res.status(500).json({
-        success: false,
-        message: "Payment system is not configured."
-      });
-    }
+    /*
+    ================================================
+    CREATE REGISTRATION
+    ================================================
+    */
+
+    const registrationId = crypto.randomUUID();
+
+    const reference = `CMDA-${registrationId}`;
 
     const registration = {
-      id: crypto.randomUUID(),
+      id: registrationId,
+
+      reference,
+
       fullName: fullName.trim(),
       phone: phone.trim(),
       email: email.trim().toLowerCase(),
+
       gender,
+
       institution: institution.trim(),
       level,
       faculty: faculty.trim(),
       department: department.trim(),
+
       cmda,
       previousOutreach,
       unit,
+
+      amount: REGISTRATION_AMOUNT,
+
       paymentStatus: "pending",
-      reference: null,
+
+      paymentReference: null,
+      paymentAmount: null,
+      paymentCurrency: null,
+      paymentChannel: null,
+      receiptPath: null,
+      receiptUploadedAt: null,
+
+      rejectionReason: null,
+
+      verifiedAt: null,
+      verifiedBy: null,
+
       createdAt: new Date().toISOString()
     };
 
-    const savedRegistration = await addRegistration(registration);
+    const savedRegistration =
+      await addRegistration(registration);
 
-    const reference = `CMDA-${savedRegistration.id}`;
-
-    const callbackUrl = process.env.APP_URL
-      ? `${process.env.APP_URL}/payment/callback`
-      : undefined;
-
-    const response = await axios.post(
-      "https://api.paystack.co/transaction/initialize",
-      {
-        email: savedRegistration.email,
-        amount: REGISTRATION_AMOUNT,
-        currency: "NGN",
-        reference,
-        callback_url: callbackUrl,
-        metadata: {
-          registration_id: savedRegistration.id,
-          full_name: savedRegistration.fullName,
-          institution: savedRegistration.institution,
-          unit: savedRegistration.unit
-        }
-      },
-      {
-        headers: {
-          Authorization:
-            `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-
-    await updateRegistration(savedRegistration.id, {
-      reference
-    });
+    /*
+    ================================================
+    RETURN PAYMENT INSTRUCTIONS
+    ================================================
+    */
 
     res.json({
       success: true,
-      authorizationUrl:
-        response.data.data.authorization_url
+
+      registration: {
+        id: savedRegistration.id,
+        reference: savedRegistration.reference,
+        fullName: savedRegistration.fullName,
+        unit: savedRegistration.unit,
+        email: savedRegistration.email,
+        paymentStatus:
+          savedRegistration.paymentStatus
+      },
+
+      payment: {
+        amount: PAYMENT_CONFIG.amount,
+        method: PAYMENT_CONFIG.method,
+        accountName:
+          PAYMENT_CONFIG.accountName,
+        accountNumber:
+          PAYMENT_CONFIG.accountNumber,
+        instructions:
+          PAYMENT_CONFIG.instructions
+      },
+
+      message:
+        "Registration saved. Please complete payment and upload your receipt for Finance verification."
     });
 
   } catch (error) {
     console.error(
-      "Payment initialization error:",
+      "Registration error:",
       error.response?.data || error.message
     );
 
     res.status(500).json({
       success: false,
       message:
-        "Unable to start payment. Please try again."
+        "Unable to complete registration. Please try again."
     });
-  }
-});
-
-app.post("/api/paystack/webhook", async (req, res) => {
-  try {
-    const signature =
-      req.headers["x-paystack-signature"];
-
-    if (!signature || !req.rawBody) {
-      return res.sendStatus(401);
-    }
-
-    const expectedSignature = crypto
-      .createHmac(
-        "sha512",
-        process.env.PAYSTACK_SECRET_KEY
-      )
-      .update(req.rawBody)
-      .digest("hex");
-
-    if (
-      !crypto.timingSafeEqual(
-        Buffer.from(signature),
-        Buffer.from(expectedSignature)
-      )
-    ) {
-      return res.sendStatus(401);
-    }
-
-    res.sendStatus(200);
-
-    const event = req.body;
-
-    if (event.event === "charge.success") {
-      const reference = event.data?.reference;
-
-      if (reference) {
-        await completePayment(
-          reference,
-          event.data
-        );
-      }
-    }
-
-  } catch (error) {
-    console.error(
-      "Webhook error:",
-      error.message
-    );
-
-    if (!res.headersSent) {
-      res.sendStatus(500);
-    }
-  }
-});
-
-app.get("/payment/callback", async (req, res) => {
-  try {
-    const reference = req.query.reference;
-
-    if (!reference) {
-      return res
-        .status(400)
-        .send("Payment reference missing.");
-    }
-
-    const registration =
-      await findByReference(reference);
-
-    if (!registration) {
-      return res
-        .status(404)
-        .send("Registration not found.");
-    }
-
-    const response = await axios.get(
-      `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
-      {
-        headers: {
-          Authorization:
-            `Bearer ${process.env.PAYSTACK_SECRET_KEY}`
-        }
-      }
-    );
-
-    const result = await completePayment(
-      reference,
-      response.data.data
-    );
-
-    if (!result.success) {
-      return res.status(400).send(`
-        <h1>Payment could not be verified</h1>
-        <p>If money was deducted, please contact the outreach team.</p>
-      `);
-    }
-
-    const whatsappLink =
-      process.env.WHATSAPP_GROUP_LINK || "#";
-
-    const safeName =
-      registration.fullName
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-
-    res.send(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta name="viewport"
-          content="width=device-width, initial-scale=1">
-        <title>Registration Complete</title>
-        <style>
-          body {
-            margin: 0;
-            min-height: 100vh;
-            display: grid;
-            place-items: center;
-            background: #f7f2ed;
-            font-family: Arial, sans-serif;
-            color: #38242d;
-            padding: 24px;
-            box-sizing: border-box;
-          }
-
-          .card {
-            max-width: 480px;
-            width: 100%;
-            background: white;
-            padding: 40px 28px;
-            border-radius: 24px;
-            text-align: center;
-            box-shadow:
-              0 12px 40px rgba(56,36,45,.12);
-          }
-
-          h1 {
-            margin-bottom: 12px;
-          }
-
-          p {
-            line-height: 1.6;
-          }
-
-          a {
-            display: inline-block;
-            margin-top: 20px;
-            padding: 14px 22px;
-            border-radius: 12px;
-            background: #8b3f58;
-            color: white;
-            text-decoration: none;
-            font-weight: 700;
-          }
-        </style>
-      </head>
-
-      <body>
-        <div class="card">
-          <h1>Registration Complete</h1>
-
-          <p>
-            Thank you, ${safeName}.
-            Your CMDA-UUTH Rural Outreach 2026
-            registration and payment have been
-            successfully confirmed.
-          </p>
-
-          <a href="${whatsappLink}">
-            Join the WhatsApp Group
-          </a>
-        </div>
-      </body>
-      </html>
-    `);
-
-  } catch (error) {
-    console.error(
-      "Payment verification error:",
-      error.response?.data || error.message
-    );
-
-    res.status(500).send(`
-      <h1>We could not confirm your payment yet.</h1>
-      <p>
-        If you were charged, please contact
-        the outreach team.
-      </p>
-    `);
   }
 });
 

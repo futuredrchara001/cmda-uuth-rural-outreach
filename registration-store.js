@@ -65,6 +65,7 @@ function fromDatabase(row) {
   return {
     id: row.id,
     reference: row.reference,
+    accountName: row.account_name || null,
     fullName: row.full_name,
     phone: row.phone,
     email: row.email,
@@ -85,6 +86,7 @@ function fromDatabase(row) {
     paymentCurrency: row.payment_currency,
     paymentChannel: row.payment_channel,
     paystackTransactionId: row.paystack_transaction_id,
+    paymentTransactionAt: row.payment_transaction_at || null,
     createdAt: row.created_at,
     paidAt: row.paid_at
   };
@@ -94,6 +96,7 @@ function toDatabase(registration) {
   return {
     id: registration.id,
     reference: registration.reference,
+    account_name: registration.accountName || null,
     full_name: registration.fullName,
     phone: registration.phone,
     email: registration.email,
@@ -112,6 +115,12 @@ function toDatabase(registration) {
     payment_channel: registration.paymentChannel || null,
     paystack_transaction_id:
       registration.paystackTransactionId || null,
+    receipt_path: registration.receiptPath || null,
+    receipt_uploaded_at: registration.receiptUploadedAt || null,
+    payment_transaction_at: registration.paymentTransactionAt || null,
+    rejection_reason: registration.rejectionReason || null,
+    verified_at: registration.verifiedAt || null,
+    verified_by: registration.verifiedBy || null,
     created_at: registration.createdAt || new Date().toISOString(),
     paid_at: registration.paidAt || null
   };
@@ -129,22 +138,45 @@ async function getRegistrations() {
     throw error;
   }
 
-  return (data || []).map(fromDatabase);
+  successfulRegistrationsCache = (data || []).map(fromDatabase);
+  successfulRegistrationsCacheAt = Date.now();
+
+  return successfulRegistrationsCache;
 }
 
+let successfulRegistrationsCache = null;
+let successfulRegistrationsCacheAt = 0;
+
 async function getSuccessfulRegistrations() {
+  const now = Date.now();
+
+  if (
+    successfulRegistrationsCache &&
+    now - successfulRegistrationsCacheAt < 30000
+  ) {
+    return successfulRegistrationsCache;
+  }
+
   const client = requireSupabase();
 
   const { data, error } = await client
     .from("registrations")
-    .select("*")
+    .select("reference,full_name,unit,department,current_level,email,phone")
     .eq("payment_status", "success");
 
   if (error) {
     throw error;
   }
 
-  return (data || []).map(fromDatabase);
+  successfulRegistrationsCache = (data || []).map(fromDatabase);
+  successfulRegistrationsCacheAt = Date.now();
+
+  return successfulRegistrationsCache;
+}
+
+function invalidateSuccessfulRegistrationsCache() {
+  successfulRegistrationsCache = null;
+  successfulRegistrationsCacheAt = 0;
 }
 
 async function hasReachedUnitLimit(unit) {
@@ -196,6 +228,42 @@ async function hasReachedLimit() {
     count: count || 0,
     limit: MAX_REGISTRATIONS,
     remaining: Math.max(MAX_REGISTRATIONS - (count || 0), 0)
+  };
+}
+
+function getRegistrationCloseAt() {
+  const raw = String(
+    process.env.REGISTRATION_CLOSE_AT || ""
+  ).trim();
+
+  if (!raw) {
+    return null;
+  }
+
+  const parsed = new Date(raw);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed;
+}
+
+async function getRegistrationClosureStatus() {
+  const overallLimit = await hasReachedLimit();
+  const closeAt = getRegistrationCloseAt();
+  const dateReached =
+    !!closeAt && new Date() >= closeAt;
+
+  return {
+    open:
+      !overallLimit.reached &&
+      !dateReached,
+    dateReached,
+    closeAt: closeAt
+      ? closeAt.toISOString()
+      : null,
+    overallLimit
   };
 }
 
@@ -272,6 +340,31 @@ async function updateRegistration(id, updates) {
       updates.paymentCurrency;
   }
 
+  if ("receiptPath" in updates) {
+    databaseUpdates.receipt_path = updates.receiptPath;
+  }
+
+  if ("receiptUploadedAt" in updates) {
+    databaseUpdates.receipt_uploaded_at = updates.receiptUploadedAt;
+  }
+
+  if ("paymentTransactionAt" in updates) {
+    databaseUpdates.payment_transaction_at =
+      updates.paymentTransactionAt;
+  }
+
+  if ("rejectionReason" in updates) {
+    databaseUpdates.rejection_reason = updates.rejectionReason;
+  }
+
+  if ("verifiedAt" in updates) {
+    databaseUpdates.verified_at = updates.verifiedAt;
+  }
+
+  if ("verifiedBy" in updates) {
+    databaseUpdates.verified_by = updates.verifiedBy;
+  }
+
   const { data, error } = await client
     .from("registrations")
     .update(databaseUpdates)
@@ -287,6 +380,22 @@ async function updateRegistration(id, updates) {
 }
 
  
+async function getPendingVerificationRegistrations() {
+  const client = requireSupabase();
+
+  const { data, error } = await client
+    .from("registrations")
+    .select("*")
+    .eq("payment_status", "receipt_submitted")
+    .order("receipt_uploaded_at", { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data || []).map(fromDatabase);
+}
+
 async function clearAllRegistrations() {
   const client = requireSupabase();
 
@@ -302,11 +411,68 @@ async function clearAllRegistrations() {
   return true;
 }
 
+
+const UNIT_REFERENCE_CODES = {
+  Organizing: "org",
+  Registration: "reg",
+  "Protocol/Security": "pro",
+  Welfare: "wel",
+  "Vital Signs": "vit",
+  Laboratory: "lab",
+  Pharmacy: "pha",
+  "Media/Publicity": "med",
+  "Accommodation/Sanitation": "acc",
+  Technical: "tec",
+  Transportation: "tra"
+};
+
+async function generateParticipantReference(unit) {
+  const db = requireSupabase();
+
+  const code = UNIT_REFERENCE_CODES[unit];
+
+  if (!code) {
+    throw new Error(`No CURO reference code configured for unit: ${unit}`);
+  }
+
+  const { data, error } = await db
+    .from("registrations")
+    .select("reference")
+    .eq("unit", unit)
+    .eq("payment_status", "success")
+    .not("reference", "is", null)
+    .ilike("reference", `CURO-${code}-%`);
+
+  if (error) {
+    throw error;
+  }
+
+  let highestNumber = 0;
+
+  for (const row of data || []) {
+    const match = String(row.reference).match(
+      new RegExp(`^CURO-${code}-(\\d+)$`, "i")
+    );
+
+    if (match) {
+      highestNumber = Math.max(
+        highestNumber,
+        Number(match[1])
+      );
+    }
+  }
+
+  return `CURO-${code}-${String(highestNumber + 1).padStart(3, "0")}`;
+}
+
 module.exports = {
+  generateParticipantReference,
   MAX_REGISTRATIONS,
   UNIT_LIMITS,
   getRegistrations,
   getSuccessfulRegistrations,
+  invalidateSuccessfulRegistrationsCache,
+  getPendingVerificationRegistrations,
   hasReachedLimit,
   hasReachedUnitLimit,
   addRegistration,

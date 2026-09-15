@@ -1,474 +1,439 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#5b1730">
-  <title>CMDA-UUTH Outreach Admin</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#5b1730">
+<title>CMDA-UUTH Admin</title>
 
-  <style>
-    * {
-      box-sizing: border-box;
-    }
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f6f2f4;color:#38252d;font-family:Arial,sans-serif}
+.stat,.unit{border:1px solid #eee4e8;box-shadow:0 6px 24px #38242d12}
+.unit{transition:.18s}
+.unit:hover{transform:translateY(-2px);box-shadow:0 10px 28px #38242d18}
+.unit-head{background:#fff}
+.section h2{font-size:20px;letter-spacing:-.2px}
+.unit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.unit-card{background:#fff;border:1px solid #eee4e8;border-radius:18px;padding:18px;box-shadow:0 6px 24px #38242d12;cursor:pointer;transition:.18s}
+.unit-card:hover{transform:translateY(-2px);box-shadow:0 10px 28px #38242d18}
+.unit-card-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.unit-name{font-weight:800;color:#5b1730;font-size:16px}
+.unit-count{font-weight:800;color:#38252d;white-space:nowrap}
+.unit-bar{height:7px;background:#eee6e9;border-radius:99px;overflow:hidden;margin:14px 0 12px}
+.unit-fill{height:100%;background:#8b3157;border-radius:99px}
+.unit-footer{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#75666d}
+.unit-view{color:#7a2348;font-weight:700}
+.member-panel{margin-top:18px;background:#fff;border:1px solid #eee4e8;border-radius:18px;padding:18px;box-shadow:0 6px 24px #38242d12}
+.member-panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.member-panel h3{margin:0;color:#5b1730}
 
-    body {
-      margin: 0;
-      background: #f7f2ed;
-      color: #38242d;
-      font-family: Arial, sans-serif;
-    }
+.unit-card{background:#fff;border:1px solid #eee4e8;border-radius:18px;padding:18px;box-shadow:0 6px 24px #38242d10}
+.unit-card-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.unit-name{font-weight:700;color:#5b1730;font-size:16px}
+.unit-count{font-size:13px;color:#7d6971;margin-top:5px}
+.unit-progress{height:7px;background:#eee7ea;border-radius:99px;overflow:hidden;margin:15px 0 12px}
+.unit-progress span{display:block;height:100%;background:#8b3153;border-radius:99px}
+.unit-footer{display:flex;justify-content:space-between;align-items:center}
+.unit-badge{font-size:12px;font-weight:700;color:#5b1730;background:#f5e8ee;border-radius:999px;padding:6px 9px}
+.view-unit{border:0;background:none;color:#8b3153;font-weight:700;cursor:pointer;padding:4px}
+.member-panel{margin-top:16px;background:#fff;border:1px solid #eee4e8;border-radius:18px;padding:18px;box-shadow:0 6px 24px #38242d10}
+.member-panel-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.member-panel h3{margin:0;color:#5b1730}
+.close-members{border:0;background:#f3e9ed;color:#5b1730;border-radius:10px;padding:8px 12px;font-weight:700}
+@media(max-width:700px){.unit-grid{grid-template-columns:1fr}}
 
-    header {
-      background: #5b1730;
-      color: white;
-      padding: 24px 20px;
-    }
+.value{font-size:32px}
 
-    header h1 {
-      margin: 0 0 6px;
-      font-size: 22px;
-    }
-
-    header p {
-      margin: 0;
-      opacity: .82;
-      font-size: 14px;
-    }
-
-    main {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 22px 16px 50px;
-    }
-
-    .summary {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 14px;
-      margin-bottom: 24px;
-    }
-
-    .card {
-      background: white;
-      border-radius: 18px;
-      padding: 20px;
-      box-shadow: 0 6px 24px rgba(56,36,45,.08);
-    }
-
-    .label {
-      font-size: 12px;
-      color: #806d75;
-      margin-bottom: 8px;
-      text-transform: uppercase;
-      letter-spacing: .05em;
-    }
-
-    .value {
-      font-size: 30px;
-      font-weight: 700;
-      color: #5b1730;
-    }
-
-    .warning {
-      margin-top: 8px;
-      color: #a35a00;
-      font-weight: 700;
-      font-size: 13px;
-    }
-
-    .full {
-      color: #a00000;
-      font-weight: 700;
-      font-size: 13px;
-      margin-top: 8px;
-    }
-
-    .section-title {
-      margin: 28px 0 12px;
-      font-size: 19px;
-      color: #5b1730;
-    }
-
-    .unit {
-      background: white;
-      border-radius: 18px;
-      margin-bottom: 14px;
-      overflow: hidden;
-      box-shadow: 0 5px 20px rgba(56,36,45,.07);
-    }
-
-    .unit-head {
-      padding: 17px 18px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      border-bottom: 1px solid #eee5e7;
-    }
-
-    .unit-name {
-      font-weight: 700;
-      color: #5b1730;
-    }
-
-    .unit-count {
-      font-weight: 700;
-    }
-
-    .unit-body {
-      padding: 0 18px 14px;
-    }
-
-    .empty {
-      padding: 18px 0 6px;
-      color: #88777e;
-      font-size: 14px;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 14px;
-    }
-
-    th,
-    td {
-      text-align: left;
-      padding: 11px 6px;
-      border-bottom: 1px solid #f0e9eb;
-    }
-
-    th {
-      color: #806d75;
-      font-size: 12px;
-      text-transform: uppercase;
-    }
-
-    tr:last-child td {
-      border-bottom: 0;
-    }
-
-    .status {
-      margin-bottom: 18px;
-      font-size: 13px;
-      color: #806d75;
-    }
-
-    .error {
-      background: #fff0f0;
-      color: #a00000;
-      padding: 14px;
-      border-radius: 12px;
-      margin-bottom: 18px;
-    }
-
-    .reset-card {
-      margin-top: 30px;
-      border: 1px solid #ead9de;
-    }
-
-    .reset-title {
-      margin: 0 0 8px;
-      color: #5b1730;
-      font-size: 20px;
-    }
-
-    .reset-text {
-      margin: 0 0 16px;
-      color: #806d75;
-      line-height: 1.5;
-      font-size: 14px;
-      max-width: 700px;
-    }
-
-    .reset-button {
-      border: 0;
-      border-radius: 12px;
-      padding: 12px 16px;
-      background: #8f263f;
-      color: white;
-      font-weight: 700;
-      font-size: 14px;
-      cursor: pointer;
-    }
-
-    .reset-button:hover {
-      background: #741d33;
-    }
-
-    .reset-button:disabled {
-      opacity: .6;
-      cursor: not-allowed;
-    }
-
-    .reset-status {
-      margin-top: 12px;
-      font-size: 13px;
-      font-weight: 600;
-    }
-
-    @media (max-width: 700px) {
-      .summary {
-        grid-template-columns: 1fr;
-      }
-
-      .unit-head {
-        align-items: flex-start;
-        flex-direction: column;
-      }
-
-      table {
-        font-size: 13px;
-      }
-
-      th,
-      td {
-        padding: 9px 4px;
-      }
-    }
-  </style>
+button,input{font:inherit}
+.login{min-height:100vh;display:grid;place-items:center;padding:24px;background:linear-gradient(145deg,#5b1730,#8f3150)}
+.login-card{width:min(430px,100%);background:#fff;border-radius:26px;padding:32px;box-shadow:0 20px 60px #35101f55}
+.logo{width:58px;height:58px;border-radius:18px;background:#5b1730;color:white;display:grid;place-items:center;font-weight:800;font-size:20px;margin-bottom:20px}
+h1{margin:0;color:#5b1730}
+.sub{color:#806d75;line-height:1.5;margin:8px 0 26px}
+input{width:100%;padding:14px;border:1px solid #dfd2d6;border-radius:12px;margin:7px 0 14px;outline:none}
+input:focus{border-color:#8f3150}
+.btn{border:0;border-radius:12px;padding:13px 18px;background:#5b1730;color:white;font-weight:700;cursor:pointer}
+.btn.secondary{background:#eee4e8;color:#5b1730}
+.btn.danger{background:#a52c45}
+.msg{margin-top:12px;font-size:14px;color:#a00000}
+.hidden{display:none!important}
+header{background:#5b1730;color:white;padding:22px}
+.head{max-width:1150px;margin:auto;display:flex;justify-content:space-between;align-items:center;gap:15px}
+header h1{color:white;font-size:21px}
+header p{margin:5px 0 0;opacity:.8;font-size:13px}
+main{max-width:1150px;margin:auto;padding:22px 16px 60px}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.card,.unit{background:white;border-radius:18px;padding:20px;box-shadow:0 6px 25px #38242d12}
+.label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#806d75}
+.value{font-size:29px;font-weight:800;color:#5b1730;margin-top:7px}
+.section{margin-top:28px}
+.section h2{color:#5b1730;font-size:19px}
+.unit{padding:0;margin:12px 0;overflow:hidden}
+.unit-head{padding:16px 18px;border-bottom:1px solid #eee5e7;display:flex;justify-content:space-between;font-weight:700;color:#5b1730}
+.unit-body{padding:8px 18px 18px}
+.item{border-bottom:1px solid #f0e9eb;padding:15px 0}
+.item:last-child{border:0}
+.item strong{color:#5b1730}
+.meta{font-size:13px;color:#806d75;margin:5px 0 10px;line-height:1.5}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.pin{max-width:260px}
+.empty{color:#806d75;padding:15px 0}
+.error{background:#fff0f0;color:#a00000;padding:12px;border-radius:10px;margin-bottom:15px}
+.success{background:#edf8f1;color:#247044;padding:12px;border-radius:10px;margin-bottom:15px}
+@media(max-width:700px){.summary{grid-template-columns:1fr}.head{align-items:flex-start}.head button{padding:10px}.login-card{padding:25px}}
+</style>
 </head>
 
 <body>
 
+<section id="login" class="login">
+  <div class="login-card">
+    <div class="logo">CM</div>
+    <h1>CMDA-UUTH Outreach</h1>
+    <p class="sub">Administration Portal<br>Sign in to manage the 2026 Rural Outreach registration.</p>
+
+    <form id="loginForm">
+      <label>Username</label>
+      <input id="username" autocomplete="username" value="admin" required>
+
+      <label>Password</label>
+      <input id="password" type="password" autocomplete="current-password" required>
+
+      <button class="btn" style="width:100%">Sign In</button>
+      <div id="loginMsg" class="msg"></div>
+    </form>
+  </div>
+</section>
+
+<section id="dashboard" class="hidden">
+
 <header>
-  <h1>CMDA-UUTH Rural Outreach 2026</h1>
-  <p>Registration Admin Dashboard</p>
+  <div class="head">
+    <div>
+      <h1>CMDA-UUTH Rural Outreach 2026</h1>
+      <p>Registration Administration • <span id="role"></span></p>
+    </div>
+    <button id="resetRegistrations" class="btn danger" type="button">Reset Registrations</button>
+    <button id="logout" class="btn secondary">Log out</button>
+  </div>
 </header>
 
 <main>
-
-  <div id="error"></div>
-
-  <div class="status" id="updated">
-    Loading registration data...
-  </div>
+  <div id="message"></div>
 
   <section class="summary">
-    <div class="card">
-      <div class="label">Confirmed Registrations</div>
-      <div class="value" id="overallCount">—</div>
-      <div id="overallWarning"></div>
-    </div>
-
-    <div class="card">
-      <div class="label">Overall Capacity</div>
-      <div class="value" id="overallLimit">—</div>
-    </div>
-
-    <div class="card">
-      <div class="label">Remaining Slots</div>
-      <div class="value" id="overallRemaining">—</div>
-    </div>
+    <div class="card"><div class="label">Confirmed</div><div id="count" class="value">—</div></div>
+    <div class="card"><div class="label">Capacity</div><div id="limit" class="value">—</div></div>
+    <div class="card"><div class="label">Remaining</div><div id="remaining" class="value">—</div></div>
   </section>
 
-  <h2 class="section-title">Unit Registrations</h2>
-
-  <div id="units"></div>
-
-  <section class="card reset-card">
-    <div class="label">Test Environment</div>
-    <h2 class="reset-title">Reset Test Registrations</h2>
-    <p class="reset-text">
-      Use this only when you want to clear all registration records
-      before another test run or before launch.
-    </p>
-    <button id="resetButton" class="reset-button">
-      Reset All Test Registrations
-    </button>
-    <div id="resetStatus"></div>
+  <section class="section">
+    <h2>Unit Registrations</h2>
+    <div id="units" class="unit-grid"></div>
   </section>
 
+  <section id="financeSection" class="section hidden">
+    <h2>Pending Payment Verification</h2>
+
+    <div class="card">
+      <p class="sub">Finance verification is required before a registration becomes confirmed.</p>
+      <label>Finance Verification PIN</label>
+      <input id="financePin" class="pin" type="password" inputmode="numeric">
+      <button id="loadReceipts" class="btn">Load Pending Receipts</button>
+    </div>
+
+    <div id="receipts"></div>
+  </section>
 </main>
+</section>
+
+<section id="participantsPage" class="hidden">
+  <header>
+    <div class="head">
+      <div>
+        <h1 id="participantsPageTitle">Participants</h1>
+        <p>Registered participants in this unit</p>
+      </div>
+      <button id="backToDashboard" class="btn secondary" type="button">
+        Back to Dashboard
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <div id="participantList"></div>
+  </main>
+</section>
 
 <script>
-  const unitsContainer = document.getElementById("units");
-  const errorContainer = document.getElementById("error");
+const $=id=>document.getElementById(id);
 
-  function escapeHtml(value) {
-    return String(value ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
+function esc(v){
+ return String(v??"").replace(/&/g,"&amp;").replace(/</g,"&lt;")
+ .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+async function api(url,opt={}){
+ const r=await fetch(url,{credentials:"same-origin",...opt});
+ const d=await r.json().catch(()=>({}));
+ if(!r.ok)throw new Error(d.message||"Request failed");
+ return d;
+}
+
+async function start(){
+ try{
+  const me=await api("/api/admin/me");
+  showDashboard(me);
+ }catch{
+  $("login").classList.remove("hidden");
+ }
+}
+
+function showDashboard(me){
+ $("login").classList.add("hidden");
+ $("participantsPage").classList.add("hidden");
+ $("dashboard").classList.remove("hidden");
+ $("role").textContent=me.role==="admin"?"Administrator":"Administrator";
+ $("financeSection").classList.remove("hidden");
+ loadStats();
+}
+
+async function login(e){
+ e.preventDefault();
+ $("loginMsg").textContent="";
+ try{
+  const d=await api("/api/admin/login",{
+   method:"POST",
+   headers:{"Content-Type":"application/json"},
+   body:JSON.stringify({
+    username:$("username").value,
+    password:$("password").value
+   })
+  });
+  showDashboard(d);
+ }catch(err){$("loginMsg").textContent=err.message}
+}
+
+async function loadStats(){
+ try{
+  const d=await api("/api/admin/stats");
+
+  $("count").textContent=d.overall.count;
+  $("limit").textContent=d.overall.limit;
+  $("remaining").textContent=d.overall.remaining;
+
+  // Overall capacity warning: 3, 2 or 1 slots remaining.
+  let overallWarning=document.getElementById("overallWarning");
+
+  if(!overallWarning){
+   overallWarning=document.createElement("div");
+   overallWarning.id="overallWarning";
+   overallWarning.style.marginTop="12px";
+   $("remaining").parentElement.parentElement.appendChild(overallWarning);
   }
 
-  function render(data) {
-    const overall = data.overall;
-
-    document.getElementById("overallCount").textContent =
-      `${overall.count} / ${overall.limit}`;
-
-    document.getElementById("overallLimit").textContent =
-      overall.limit;
-
-    document.getElementById("overallRemaining").textContent =
-      overall.remaining;
-
-    const overallWarning = document.getElementById("overallWarning");
-
-    if (overall.full) {
-      overallWarning.innerHTML =
-        '<div class="full">Registration capacity reached</div>';
-    } else if (overall.warning) {
-      overallWarning.innerHTML =
-        `<div class="warning">${overall.remaining} registration slot${overall.remaining === 1 ? "" : "s"} remaining</div>`;
-    } else {
-      overallWarning.innerHTML = "";
-    }
-
-    unitsContainer.innerHTML = "";
-
-    for (const [unitName, unit] of Object.entries(data.units)) {
-      let alert = "";
-
-      if (unit.full) {
-        alert = '<div class="full">Unit is full</div>';
-      } else if (unit.warning) {
-        alert =
-          `<div class="warning">${unit.remaining} slot${unit.remaining === 1 ? "" : "s"} remaining</div>`;
-      }
-
-      let rows = "";
-
-      if (unit.members.length === 0) {
-        rows = `
-          <div class="empty">
-            No confirmed registrations yet.
-          </div>
-        `;
-      } else {
-        rows = `
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Department</th>
-                <th>Level</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${unit.members.map(member => `
-                <tr>
-                  <td>${escapeHtml(member.name)}</td>
-                  <td>${escapeHtml(member.department)}</td>
-                  <td>${escapeHtml(member.level)}</td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
-        `;
-      }
-
-      unitsContainer.innerHTML += `
-        <section class="unit">
-          <div class="unit-head">
-            <div>
-              <div class="unit-name">
-                ${escapeHtml(unitName)}
-              </div>
-              ${alert}
-            </div>
-
-            <div class="unit-count">
-              ${unit.count} / ${unit.limit}
-            </div>
-          </div>
-
-          <div class="unit-body">
-            ${rows}
-          </div>
-        </section>
-      `;
-    }
-
-    document.getElementById("updated").textContent =
-      `Last updated: ${new Date(data.updatedAt).toLocaleString()}`;
-
-    errorContainer.innerHTML = "";
+  if(d.overall.remaining>0 && d.overall.remaining<=3){
+   overallWarning.innerHTML=
+    '<div style="padding:12px 14px;background:#fff4e5;border:1px solid #f1c27d;border-radius:12px;color:#8a4b08;font-weight:700">'+
+    'Only '+d.overall.remaining+' registration slot'+
+    (d.overall.remaining===1?'':'s')+
+    ' remaining.'+
+    '</div>';
+  }else{
+   overallWarning.innerHTML="";
   }
 
-  async function loadDashboard() {
-    try {
-      const response = await fetch("/api/admin/stats", {
-        cache: "no-store"
-      });
+  $("units").innerHTML=Object.entries(d.units).map(([name,u])=>{
+   const pct=u.limit
+    ?Math.min(100,(u.count/u.limit)*100)
+    :0;
 
-      const data = await response.json();
+   let warning="";
 
-      if (!response.ok || !data.success) {
-        throw new Error(
-          data.message || "Unable to load dashboard."
-        );
-      }
+   if(u.full){
+    warning=
+     '<div style="margin-top:10px;padding:8px 10px;background:#fdecec;border-radius:9px;color:#a52c45;font-size:12px;font-weight:700">'+
+     'Unit registration limit reached'+
+     '</div>';
+   }else if(u.remaining>0 && u.remaining<=3){
+    warning=
+     '<div style="margin-top:10px;padding:8px 10px;background:#fff4e5;border:1px solid #f1c27d;border-radius:9px;color:#8a4b08;font-size:12px;font-weight:700">'+
+     u.remaining+' slot'+
+     (u.remaining===1?'':'s')+
+     ' remaining'+
+     '</div>';
+   }
 
-      render(data);
-    } catch (error) {
-      console.error(error);
+   return `
+    <div class="unit-card participant-unit-card">
+     <div class="unit-card-top">
+      <div class="unit-name">${esc(name)}</div>
+      <div class="unit-count">${u.count}/${u.limit}</div>
+     </div>
 
-      errorContainer.innerHTML = `
-        <div class="error">
-          ${escapeHtml(error.message)}
-        </div>
-      `;
-    }
-  }
+     <div class="unit-bar">
+      <div class="unit-fill" style="width:${pct}%"></div>
+     </div>
 
-  const resetButton = document.getElementById("resetButton");
-  const resetStatus = document.getElementById("resetStatus");
+     <div class="unit-footer">
+      <span>${u.count===1?'1 registered':u.count+' registered'}</span>
+      <span class="unit-view">View participants →</span>
+     </div>
 
-  resetButton.addEventListener("click", async () => {
-    const confirmed = window.confirm(
-      "This will permanently delete ALL registration records currently in the database.\n\n" +
-      "Use this only for clearing test data.\n\n" +
-      "Are you sure you want to continue?"
-    );
+     ${warning}
+    </div>`;
+  }).join("");
 
-    if (!confirmed) {
-      return;
-    }
+  // Each unit opens its own participant page.
+  document.querySelectorAll(".participant-unit-card").forEach((card,index)=>{
+   const entries=Object.entries(d.units);
+   const [name,u]=entries[index];
 
-    resetButton.disabled = true;
-    resetButton.textContent = "Resetting...";
-    resetStatus.className = "reset-status";
-    resetStatus.textContent = "Clearing registration records...";
-
-    try {
-      const response = await fetch("/api/admin/reset", {
-        method: "POST",
-        cache: "no-store"
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(
-          data.message || "Unable to reset registration records."
-        );
-      }
-
-      resetStatus.textContent =
-        "All registration records have been cleared successfully.";
-
-      await loadDashboard();
-
-    } catch (error) {
-      console.error(error);
-
-      resetStatus.textContent =
-        error.message || "Unable to reset registration records.";
-
-    } finally {
-      resetButton.disabled = false;
-      resetButton.textContent = "Reset All Test Registrations";
-    }
+   card.addEventListener("click",()=>{
+    openParticipantsPage(name,u.members);
+   });
   });
 
-  loadDashboard();
+ }catch(err){
+  $("message").innerHTML=`<div class="error">${esc(err.message)}</div>`;
+ }
+}
+async function loadReceipts(){
+ const pin=$("financePin").value;
+ if(!pin)return;
 
-  setInterval(loadDashboard, 30000);
+ try{
+  const d=await api("/api/admin/pending-verifications?pin="+encodeURIComponent(pin));
+  renderReceipts(d.units,pin);
+ }catch(err){
+  $("receipts").innerHTML=`<div class="error">${esc(err.message)}</div>`;
+ }
+}
+
+function renderReceipts(units,pin){
+ $("receipts").innerHTML=Object.entries(units).map(([unit,items])=>`
+  <div class="unit">
+   <div class="unit-head"><span>${esc(unit)}</span><span>${items.length} pending</span></div>
+   <div class="unit-body">
+    ${items.map(r=>`
+     <div class="item">
+      <strong>${esc(r.fullName)}</strong>
+      <div class="meta">
+       Ref: ${esc(r.reference)}<br>
+       ${esc(r.department)} • ${esc(r.level)}<br>
+       ₦${Number(r.amount||0).toLocaleString()} • ${esc(r.email)}
+      </div>
+      <div class="actions">
+       <button class="btn secondary" onclick="viewReceipt('${encodeURIComponent(r.reference)}','${encodeURIComponent(pin)}')">View Receipt</button>
+       <button class="btn" onclick="approve('${encodeURIComponent(r.reference)}','${encodeURIComponent(pin)}')">Approve</button>
+       <button class="btn danger" onclick="reject('${encodeURIComponent(r.reference)}','${encodeURIComponent(pin)}')">Reject</button>
+      </div>
+     </div>`).join("")}
+   </div>
+  </div>`).join("")||'<div class="card empty">No receipts are currently awaiting verification.</div>';
+}
+
+async function viewReceipt(ref,pin){
+ const d=await api("/api/admin/receipt/"+ref+"?pin="+pin);
+ window.open(d.url,"_blank","noopener");
+}
+
+async function approve(ref,pin){
+ if(!confirm("Confirm that Finance has verified this payment?"))return;
+ await api("/api/admin/registrations/"+ref+"/approve",{
+  method:"POST",headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({pin:decodeURIComponent(pin)})
+ });
+ $("message").innerHTML='<div class="success">Payment approved successfully.</div>';
+ loadStats();loadReceipts();
+}
+
+async function reject(ref,pin){
+ const reason=prompt("Enter the reason for rejecting this payment:");
+ if(!reason)return;
+ await api("/api/admin/registrations/"+ref+"/reject",{
+  method:"POST",headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({pin:decodeURIComponent(pin),reason})
+ });
+ $("message").innerHTML='<div class="success">Payment rejected and participant notified.</div>';
+ loadStats();loadReceipts();
+}
+
+$("loginForm").addEventListener("submit",login);
+$("loadReceipts").addEventListener("click",loadReceipts);
+
+$("resetRegistrations").addEventListener("click",async()=>{
+  const confirmed = confirm(
+    "WARNING: This will permanently clear ALL registration records.\n\nAre you sure you want to continue?"
+  );
+  if (!confirmed) return;
+
+  const password = prompt("Enter the reset password:");
+  if (password === null) return;
+
+  if (!password) {
+    $("message").innerHTML = '<div class="error">Reset password is required.</div>';
+    return;
+  }
+
+  try {
+    const d = await api("/api/admin/reset", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({password})
+    });
+
+    $("message").innerHTML = `<div class="success">${esc(d.message)}</div>`;
+    await loadStats();
+  } catch (err) {
+    $("message").innerHTML = `<div class="error">${esc(err.message)}</div>`;
+  }
+});
+$("logout").addEventListener("click",async()=>{
+ await api("/api/admin/logout",{method:"POST"});
+ location.reload();
+});
+
+start();
+function openParticipantsPage(name,members){
+ $("dashboard").classList.add("hidden");
+ $("participantsPage").classList.remove("hidden");
+
+ $("participantsPageTitle").textContent=name+" Participants";
+
+ const list=$("participantList");
+
+ if(!Array.isArray(members) || !members.length){
+  list.innerHTML=
+   '<div class="card">'+
+   '<p style="margin:0;color:#777">No participants registered in this unit yet.</p>'+
+   '</div>';
+  return;
+ }
+
+ list.innerHTML=members.map((m,i)=>`
+  <div class="card" style="margin-bottom:14px">
+   <div style="font-size:17px;font-weight:800;color:#5b1730;margin-bottom:12px">
+    ${esc(m.name || m.fullName || "Participant "+(i+1))}
+   </div>
+
+   <div style="display:grid;gap:8px;color:#66565e;font-size:14px">
+    <div><strong>Registration ID:</strong> ${esc(m.reference || "—")}</div>
+    <div><strong>Department:</strong> ${esc(m.department || "—")}</div>
+    <div><strong>Level:</strong> ${esc(m.level || "—")}</div>
+    <div><strong>Email:</strong> ${esc(m.email || "—")}</div>
+    <div><strong>Phone:</strong> ${esc(m.phone || "—")}</div>
+   </div>
+  </div>
+ `).join("");
+}
+
+$("backToDashboard").addEventListener("click",()=>{
+ $("participantsPage").classList.add("hidden");
+ $("dashboard").classList.remove("hidden");
+});
+
 </script>
-
 </body>
 </html>
