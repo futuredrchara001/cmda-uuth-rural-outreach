@@ -98,7 +98,22 @@
 
 
             <div class="field">
-              <label for="gender">Gender</label>
+              <div class="field">
+              <label for="accountName">Account Name Used for Payment</label>
+              <input
+                type="text"
+                id="accountName"
+                name="accountName"
+                placeholder="Name on the account used for payment"
+                required
+                autocomplete="name"
+              >
+              <p class="field-description">
+                Enter the name on the bank account used to make your registration payment.
+              </p>
+            </div>
+
+            <label for="gender">Gender</label>
 
               <select id="gender" name="gender" required>
                 <option value="">Select</option>

@@ -220,6 +220,10 @@ main{max-width:1150px;margin:auto;padding:22px 16px 60px}
         Save Registration Settings
       </button>
 
+        <button id="backFromSettings" class="btn secondary" type="button" style="margin-top:10px">
+          Back to Dashboard
+        </button>
+
       <div id="settingsMessage" style="margin-top:12px"></div>
     </div>
   </section>
@@ -630,10 +634,10 @@ function renderReceipts(units,pin){
 
               <div class="meta">
                 Ref: ${esc(r.reference)}<br>
-                ${esc(r.department)} • ${esc(r.level)}<br>
-                ₦${Number(r.amount||0).toLocaleString()} • ${esc(r.email)}<br>
-                Payment:
-                ${esc(r.paymentTransactionAt || "Not supplied")}
+                Unit: ${esc(r.unit || unit)}<br>
+                Payer Account Name: ${esc(r.accountName || "Not supplied")}<br>
+                Transaction Date: ${esc(r.paymentTransactionAt ? String(r.paymentTransactionAt).split("T")[0] : "Not supplied")}<br>
+                Transaction Time: ${esc(r.paymentTransactionAt && String(r.paymentTransactionAt).includes("T") ? String(r.paymentTransactionAt).split("T")[1].slice(0,5) : "Not supplied")}
               </div>
 
               <div class="actions">
@@ -755,6 +759,7 @@ $("financePin").addEventListener("keydown",e=>{
   if(e.key==="Enter") unlockFinance();
 });
 
+  $("backFromSettings").addEventListener("click",()=>showAdminPage("home"));
 $("saveRegistrationSettings").addEventListener("click",saveRegistrationSettings);
 $("resetRegistrations").addEventListener("click",async()=>{
   const confirmed = confirm(

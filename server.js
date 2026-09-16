@@ -827,6 +827,7 @@ app.get("/api/admin/pending-verifications", requireAdmin, async (req, res) => {
       grouped[unit].push({
         reference: registration.reference,
         fullName: registration.fullName,
+        accountName: registration.accountName || null,
         email: registration.email,
         phone: registration.phone,
         department: registration.department,
@@ -1346,10 +1347,16 @@ app.post(
         });
       }
 
+      if (!paymentTransactionTime) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Payment transaction time is required."
+        });
+      }
+
       const paymentTransactionAt =
-        paymentTransactionTime
-          ? `${paymentTransactionDate}T${paymentTransactionTime}:00`
-          : paymentTransactionDate;
+        `${paymentTransactionDate}T${paymentTransactionTime}:00`;
 
       if (!reference) {
         return res.status(400).json({
@@ -1530,7 +1537,8 @@ app.post("/api/register", async (req, res) => {
       department,
       cmda,
       previousOutreach,
-      unit
+      unit,
+      accountName
     } = req.body;
 
     /*
@@ -1550,7 +1558,8 @@ app.post("/api/register", async (req, res) => {
       !department ||
       !cmda ||
       !previousOutreach ||
-      !unit
+      !unit ||
+      !accountName
     ) {
       return res.status(400).json({
         success: false,

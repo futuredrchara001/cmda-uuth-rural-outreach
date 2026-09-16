@@ -569,12 +569,12 @@ let currentStage = "payment";
             class="receipt-field-label"
           >
             Payment transaction time
-            <span class="optional-label">(optional)</span>
+            <span class="required-label">*</span>
           </label>
 
           <input
             type="time"
-            id="paymentTransactionTime"
+            id="paymentTransactionTime" required
             class="receipt-time-input"
           />
         </div>
@@ -746,12 +746,12 @@ let currentStage = "payment";
               class="receipt-field-label"
             >
               Payment transaction time
-              <span class="optional-label">(optional)</span>
+              <span class="required-label">*</span>
             </label>
 
             <input
               type="time"
-              id="paymentTransactionTime"
+              id="paymentTransactionTime" required
               class="receipt-time-input"
             />
           </div>
@@ -1230,6 +1230,25 @@ let currentStage = "payment";
       return;
     }
 
+
+
+      if (!transactionTime) {
+        const messageBox =
+          $("#receiptUploadMessage");
+
+        if (messageBox) {
+          messageBox.className =
+            "upload-message error";
+          messageBox.textContent =
+            "Please enter the payment transaction time.";
+        }
+
+        if (transactionTimeInput) {
+          transactionTimeInput.focus();
+        }
+
+        return;
+      }
 
     const fileInput =
       $("#receiptFile");
