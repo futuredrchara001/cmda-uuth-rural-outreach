@@ -582,7 +582,7 @@ function getAdminSession(req) {
 
   const match =
     cookies.match(
-      /(?:^|;\\s*)cmda_admin_session=([^;]+)/
+      /(?:^|;\s*)cmda_admin_session=([^;]+)/
     );
 
   if (!match) {
@@ -1111,6 +1111,7 @@ app.put("/api/admin/registration-settings", requireAdmin, async (req, res) => {
         typeof body.payment === "object"
           ? {
               method: String(body.payment.method || "").trim(),
+              bankName: String(body.payment.bankName || "").trim(),
               accountName: String(body.payment.accountName || "").trim(),
               accountNumber: String(body.payment.accountNumber || "").trim(),
               instructions: String(body.payment.instructions || "").trim(),

@@ -180,6 +180,11 @@ main{max-width:1150px;margin:auto;padding:22px 16px 60px}
         </div>
 
         <div>
+          <label for="paymentBankName">Bank name</label>
+          <input id="paymentBankName" type="text" placeholder="e.g. OPay">
+        </div>
+
+        <div>
           <label for="paymentAccountName">Account name</label>
           <input id="paymentAccountName" type="text">
         </div>
@@ -374,6 +379,9 @@ async function loadRegistrationSettings(){
     $("paymentMethod").value =
       payment.method || "Bank";
 
+    $("paymentBankName").value =
+      payment.bankName || "";
+
     $("paymentAccountName").value =
       payment.accountName || "";
 
@@ -461,6 +469,7 @@ async function saveRegistrationSettings(){
           unitLimits,
           payment: {
             method: $("paymentMethod").value.trim(),
+            bankName: $("paymentBankName").value.trim(),
             accountName: $("paymentAccountName").value.trim(),
             accountNumber: $("paymentAccountNumber").value.trim(),
             instructions: $("paymentInstructions").value.trim(),
