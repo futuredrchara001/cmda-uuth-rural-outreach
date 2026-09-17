@@ -855,6 +855,21 @@ let currentStage = "payment";
 
         </div>
 
+        <div class="email-confirmation">
+
+          <h3>
+            Confirmation Email Sent
+          </h3>
+
+          <p>
+            A confirmation email containing your
+            registration details and reference has
+            been sent to the email address you provided.
+            Please check your inbox or spam/junk folder.
+          </p>
+
+        </div>
+
         ${
           whatsappAvailable
             ? `
@@ -1877,7 +1892,7 @@ let currentStage = "payment";
   ======================================================
   */
 
-  function init() {
+  async function init() {
     if (registrationForm) {
       registrationForm.addEventListener(
         "submit",
@@ -1887,10 +1902,45 @@ let currentStage = "payment";
 
     attachLandingButtons();
 
-    const landing = document.querySelector("#landingPage");
+    const landing =
+      document.querySelector("#landingPage");
 
     if (landing) {
       showLandingPage();
+    }
+
+    const params =
+      new URLSearchParams(
+        window.location.search
+      );
+
+    const reference =
+      String(
+        params.get("reference") || ""
+      )
+        .trim()
+        .toUpperCase();
+
+    if (reference) {
+      saveReference(reference);
+
+      try {
+        await loadRegistrationStatus(
+          reference,
+          true
+        );
+      } catch (error) {
+        console.error(
+          "Unable to restore registration from reference:",
+          error
+        );
+      }
+
+      window.history.replaceState(
+        {},
+        document.title,
+        "/registration/#registration"
+      );
     }
   }
 if (

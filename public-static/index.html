@@ -36,20 +36,27 @@
           <span>Registration Fee ₦3,800</span>
         </div>
 
-        <button id="beginRegistration" class="primary-btn">
+        <button id="beginRegistration" class="primary-btn" type="button">
           Begin New Registration
           <span>→</span>
         </button>
 
-        <button id="continueRegistration" class="secondary-btn" type="button">
-          Continue Existing Registration
-          <span>→</span>
-        </button>
+        <div class="continue-registration-area">
 
-        <p class="continue-note">
-          Already started a registration or submitted a payment receipt?
-          Continue with your existing CMDA reference.
-        </p>
+          <p class="continue-note">
+            Already started a registration or submitted a payment receipt?
+          </p>
+
+          <button
+            id="continueRegistration"
+            class="secondary-btn"
+            type="button"
+          >
+            Continue Existing Registration
+            <span>→</span>
+          </button>
+
+        </div>
 
         <div class="status-message" id="statusMessage">
           <span class="status-dot"></span>
