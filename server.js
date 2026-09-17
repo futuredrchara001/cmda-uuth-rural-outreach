@@ -10,6 +10,7 @@ const {
   getRegistrationClosureStatus,
   hasReachedUnitLimit,
   addRegistration,
+  findExistingRegistrationByContact,
   findByReference,
   updateRegistration,
   getPendingVerificationRegistrations,
@@ -287,6 +288,10 @@ Sent to:
 
 async function sendSuccessfulRegistrationEmails(registration) {
   const participantEmail = registration.email;
+  const settings = await getRegistrationSettings();
+  const whatsappLink =
+    settings.payment?.whatsappGroupLink ||
+    PAYMENT_CONFIG.whatsappGroupLink;
 
   const adminRecipients = [
     ...getAssistantRegistrationHeadEmails(),
@@ -312,7 +317,7 @@ Payment Status: VERIFIED
 Your payment has been manually verified by the Finance Administrator, and your registration is now confirmed.
 
 WhatsApp Group:
-${PAYMENT_CONFIG.whatsappGroupLink}
+${whatsappLink}
 
 Please keep this email for your records.
 
@@ -467,23 +472,27 @@ app.get("/api/approved-whatsapp", async (req, res) => {
       });
     }
 
-    if (!PAYMENT_CONFIG.whatsappGroupLink) {
-      console.error(
-        "WHATSAPP_GROUP_LINK is not configured."
-      );
+      const settings = await getRegistrationSettings();
+      const whatsappLink =
+        settings.payment?.whatsappGroupLink ||
+        PAYMENT_CONFIG.whatsappGroupLink;
 
-      return res.status(503).json({
-        success: false,
-        message:
-          "The WhatsApp group link is currently unavailable."
+      if (!whatsappLink) {
+        console.error(
+          "WHATSAPP_GROUP_LINK is not configured."
+        );
+
+        return res.status(503).json({
+          success: false,
+          message:
+            "The WhatsApp group link is currently unavailable."
+        });
+      }
+
+      return res.json({
+        success: true,
+        whatsappLink
       });
-    }
-
-    return res.json({
-      success: true,
-      whatsappLink:
-        PAYMENT_CONFIG.whatsappGroupLink
-    });
 
   } catch (error) {
     console.error(
@@ -545,8 +554,6 @@ const ADMIN_USERNAME =
 const ADMIN_PASSWORD =
   process.env.ADMIN_PASSWORD || "";
 
-const FINANCE_VERIFICATION_PIN =
-  process.env.FINANCE_VERIFICATION_PIN || "";
 
 const adminSessions = new Map();
 
@@ -797,23 +804,8 @@ app.post("/api/admin/logout", (req, res) => {
 
 
 
-function requireFinancePin(req, res) {
-  const pin = String(req.body?.pin || req.query?.pin || "");
-
-  if (!FINANCE_VERIFICATION_PIN || pin !== FINANCE_VERIFICATION_PIN) {
-    res.status(403).json({
-      success: false,
-      message: "Finance verification required."
-    });
-    return false;
-  }
-
-  return true;
-}
-
 app.get("/api/admin/pending-verifications", requireAdmin, async (req, res) => {
   try {
-    if (!requireFinancePin(req, res)) return;
 
     const pending = await getPendingVerificationRegistrations();
 
@@ -854,7 +846,6 @@ app.get("/api/admin/pending-verifications", requireAdmin, async (req, res) => {
 
 app.get("/api/admin/receipt/:reference", requireAdmin, async (req, res) => {
   try {
-    if (!requireFinancePin(req, res)) return;
 
     const registration = await findByReference(
       String(req.params.reference || "").trim()
@@ -891,7 +882,6 @@ app.get("/api/admin/receipt/:reference", requireAdmin, async (req, res) => {
 
 app.post("/api/admin/registrations/:reference/approve", requireAdmin, async (req, res) => {
   try {
-    if (!requireFinancePin(req, res)) return;
 
     const registration = await findByReference(
       String(req.params.reference || "").trim()
@@ -909,7 +899,14 @@ app.post("/api/admin/registrations/:reference/approve", requireAdmin, async (req
         success: false,
         message: "This registration is not awaiting Finance verification."
       });
-    }
+
+
+
+      }
+      const settings = await getRegistrationSettings();
+      const paymentMethod =
+        settings.payment?.method ||
+        PAYMENT_CONFIG.method;
 
     let updated;
     let lastReferenceError;
@@ -925,7 +922,7 @@ app.post("/api/admin/registrations/:reference/approve", requireAdmin, async (req
           paymentReference: officialReference,
           paymentAmount: registration.amount,
           paymentCurrency: "NGN",
-          paymentChannel: PAYMENT_CONFIG.method,
+          paymentChannel: paymentMethod,
           verifiedAt: new Date().toISOString(),
           verifiedBy: "Finance",
           rejectionReason: null
@@ -967,7 +964,6 @@ app.post("/api/admin/registrations/:reference/approve", requireAdmin, async (req
 
 app.post("/api/admin/registrations/:reference/reject", requireAdmin, async (req, res) => {
   try {
-    if (!requireFinancePin(req, res)) return;
 
     const reason = String(req.body?.reason || "").trim();
 
@@ -1252,6 +1248,9 @@ app.get("/api/registration-status", async (req, res) => {
         reference:
           registration.reference,
 
+        pendingReference:
+          registration.pendingReference || null,
+
         fullName:
           registration.fullName,
 
@@ -1274,37 +1273,37 @@ app.get("/api/registration-status", async (req, res) => {
           registration.verifiedAt || null
       },
 
-      payment: {
-        amount:
-          PAYMENT_CONFIG.amount,
-
-        method:
-          payment.method ||
-          PAYMENT_CONFIG.method,
-
-        bankName:
-          payment.bankName ||
-          "OPay",
-
-        accountName:
-          payment.accountName ||
-          PAYMENT_CONFIG.accountName,
-
-        accountNumber:
-          payment.accountNumber ||
-          PAYMENT_CONFIG.accountNumber,
-
-        instructions:
-          payment.instructions ||
-          PAYMENT_CONFIG.instructions
-      },
-
-      whatsappAvailable:
-        status === "success" &&
-        Boolean(
-          payment.whatsappGroupLink ||
-          PAYMENT_CONFIG.whatsappGroupLink
-        )
+        payment: {
+          amount:
+            PAYMENT_CONFIG.amount,
+          method:
+            payment.method ||
+            settings.payment?.method ||
+            PAYMENT_CONFIG.method,
+          bankName:
+            payment.bankName ||
+            settings.payment?.bankName ||
+            "OPay",
+          accountName:
+            payment.accountName ||
+            settings.payment?.accountName ||
+            PAYMENT_CONFIG.accountName,
+          accountNumber:
+            payment.accountNumber ||
+            settings.payment?.accountNumber ||
+            PAYMENT_CONFIG.accountNumber,
+          instructions:
+            payment.instructions ||
+            settings.payment?.instructions ||
+            PAYMENT_CONFIG.instructions
+        },
+        whatsappAvailable:
+          status === "success" &&
+          Boolean(
+            settings.payment?.whatsappGroupLink ||
+            payment.whatsappGroupLink ||
+            PAYMENT_CONFIG.whatsappGroupLink
+          )
     });
 
   } catch (error) {
@@ -1506,6 +1505,134 @@ app.post(
   }
 );
 
+
+/*
+==================================================
+EDIT EXISTING REGISTRATION
+==================================================
+Participants may update their saved registration
+before payment verification.
+
+This updates the existing Supabase row.
+It NEVER creates another registration.
+*/
+
+app.put("/api/registration/:reference", async (req, res) => {
+  try {
+    const reference =
+      String(req.params.reference || "").trim();
+
+    if (!reference) {
+      return res.status(400).json({
+        success: false,
+        message: "Registration reference is required."
+      });
+    }
+
+    const registration =
+      await findByReference(reference);
+
+    if (!registration) {
+      return res.status(404).json({
+        success: false,
+        message: "Registration could not be found."
+      });
+    }
+
+    if (
+      registration.paymentStatus !== "pending" &&
+      registration.paymentStatus !== "rejected"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "This registration can no longer be edited."
+      });
+    }
+
+    const {
+      fullName,
+      phone,
+      email,
+      gender,
+      institution,
+      level,
+      faculty,
+      department,
+      cmda,
+      previousOutreach,
+      unit
+    } = req.body || {};
+
+    if (
+      !fullName ||
+      !phone ||
+      !email ||
+      !gender ||
+      !institution ||
+      !level ||
+      !faculty ||
+      !department ||
+      !cmda ||
+      !previousOutreach ||
+      !unit
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Please complete all required fields."
+      });
+    }
+
+    const updated =
+      await updateRegistration(registration.id, {
+        fullName: String(fullName).trim(),
+        phone: String(phone).trim(),
+        email: String(email).trim().toLowerCase(),
+        gender,
+        institution: String(institution).trim(),
+        level,
+        faculty: String(faculty).trim(),
+        department: String(department).trim(),
+        cmda,
+        previousOutreach,
+        unit,
+        paymentStatus: "pending",
+        rejectionReason: null
+      });
+
+    res.json({
+      success: true,
+      registration: {
+        id: updated.id,
+        reference: updated.reference,
+        fullName: updated.fullName,
+        phone: updated.phone,
+        email: updated.email,
+        gender: updated.gender,
+        institution: updated.institution,
+        level: updated.level,
+        faculty: updated.faculty,
+        department: updated.department,
+        cmda: updated.cmda,
+        previousOutreach: updated.previousOutreach,
+        unit: updated.unit,
+        paymentStatus: updated.paymentStatus
+      }
+    });
+  } catch (error) {
+    console.error(
+      "Registration update error:",
+      error.message
+    );
+
+    res.status(500).json({
+      success: false,
+      message:
+        "Unable to update your registration. Please try again."
+    });
+  }
+});
+
 app.post("/api/register", async (req, res) => {
   try {
     /*
@@ -1526,6 +1653,8 @@ app.post("/api/register", async (req, res) => {
       });
     }
 
+      const settings = await getRegistrationSettings();
+
     const {
       fullName,
       phone,
@@ -1537,8 +1666,7 @@ app.post("/api/register", async (req, res) => {
       department,
       cmda,
       previousOutreach,
-      unit,
-      accountName
+      unit
     } = req.body;
 
     /*
@@ -1558,12 +1686,43 @@ app.post("/api/register", async (req, res) => {
       !department ||
       !cmda ||
       !previousOutreach ||
-      !unit ||
-      !accountName
+      !unit
     ) {
       return res.status(400).json({
         success: false,
         message: "Please complete all required fields."
+      });
+    }
+
+    /*
+    ================================================
+    EXISTING REGISTRATION CHECK
+    ================================================
+    A person must not accidentally create a second
+    registration using the same phone + email.
+    */
+
+    const existingRegistration =
+      await findExistingRegistrationByContact(
+        phone.trim(),
+        email.trim().toLowerCase()
+      );
+
+    if (existingRegistration) {
+      const existingReference =
+        existingRegistration.reference ||
+        existingRegistration.pendingReference ||
+        "";
+
+      return res.status(409).json({
+        success: false,
+        duplicate: true,
+        reference: existingReference,
+        paymentStatus:
+          existingRegistration.paymentStatus ||
+          "pending",
+        message:
+          "An existing registration was found with these contact details. Please use Continue Existing Registration to continue that registration."
       });
     }
 
@@ -1591,12 +1750,16 @@ app.post("/api/register", async (req, res) => {
 
     const registrationId = crypto.randomUUID();
 
-    const reference = `CMDA-${registrationId}`;
+    /*
+    The database trigger assigns the pending reference
+    automatically as CMDA-PEND1, CMDA-PEND2, etc.
+    The reference is never generated by the browser/server.
+    */
 
     const registration = {
       id: registrationId,
 
-      reference,
+      reference: null,
 
       fullName: fullName.trim(),
       phone: phone.trim(),
@@ -1640,34 +1803,43 @@ app.post("/api/register", async (req, res) => {
     RETURN PAYMENT INSTRUCTIONS
     ================================================
     */
+      const registrationPayment = settings.payment || {};
 
-    res.json({
-      success: true,
+      res.json({
+        success: true,
 
-      registration: {
-        id: savedRegistration.id,
-        reference: savedRegistration.reference,
-        fullName: savedRegistration.fullName,
-        unit: savedRegistration.unit,
-        email: savedRegistration.email,
-        paymentStatus:
-          savedRegistration.paymentStatus
-      },
+        registration: {
+          id: savedRegistration.id,
+          reference: savedRegistration.reference,
+          fullName: savedRegistration.fullName,
+          unit: savedRegistration.unit,
+          email: savedRegistration.email,
+          paymentStatus:
+            savedRegistration.paymentStatus
+        },
 
-      payment: {
-        amount: PAYMENT_CONFIG.amount,
-        method: PAYMENT_CONFIG.method,
-        accountName:
-          PAYMENT_CONFIG.accountName,
-        accountNumber:
-          PAYMENT_CONFIG.accountNumber,
-        instructions:
-          PAYMENT_CONFIG.instructions
-      },
+        payment: {
+          amount: PAYMENT_CONFIG.amount,
+          method:
+            registrationPayment.method ||
+            PAYMENT_CONFIG.method,
+          bankName:
+            registrationPayment.bankName ||
+            "OPay",
+          accountName:
+            registrationPayment.accountName ||
+            PAYMENT_CONFIG.accountName,
+          accountNumber:
+            registrationPayment.accountNumber ||
+            PAYMENT_CONFIG.accountNumber,
+          instructions:
+            registrationPayment.instructions ||
+            PAYMENT_CONFIG.instructions
+        },
 
-      message:
-        "Registration saved. Please complete payment and upload your receipt for Finance verification."
-    });
+        message:
+          "Registration saved. Please complete payment and upload your receipt for Finance verification."
+      });
 
   } catch (error) {
     console.error(

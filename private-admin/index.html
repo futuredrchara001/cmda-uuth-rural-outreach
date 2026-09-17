@@ -56,6 +56,42 @@ input:focus{border-color:#8f3150}
 .btn{border:0;border-radius:12px;padding:13px 18px;background:#5b1730;color:white;font-weight:700;cursor:pointer}
 .btn.secondary{background:#eee4e8;color:#5b1730}
 .btn.danger{background:#a52c45}
+
+.dashboard-actions{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(150px,1fr));
+  gap:10px;
+  width:min(430px,100%);
+}
+
+.dashboard-actions .btn{
+  width:100%;
+  min-height:44px;
+  white-space:normal;
+}
+
+.section-card-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:16px;
+  margin-bottom:16px;
+}
+
+@media(max-width:700px){
+  .dashboard-actions{
+    width:100%;
+    grid-template-columns:1fr 1fr;
+  }
+
+  .section-card-head{
+    flex-direction:column;
+  }
+
+  .section-card-head .btn{
+    width:100%;
+  }
+}
 .msg{margin-top:12px;font-size:14px;color:#a00000}
 .hidden{display:none!important}
 header{background:#5b1730;color:white;padding:22px}
@@ -122,10 +158,23 @@ main{max-width:1150px;margin:auto;padding:22px 16px 60px}
       <h1>CMDA-UUTH Rural Outreach 2026</h1>
       <p>Registration Administration • <span id="role"></span></p>
     </div>
-    <button id="resetRegistrations" class="btn danger" type="button">Reset Registrations</button>
-    <button id="openSettings" class="btn secondary" type="button">Registration Controls</button>
-    <button id="openFinance" class="btn secondary" type="button">Finance Verification</button>
-    <button id="logout" class="btn secondary">Log out</button>
+    <div class="dashboard-actions">
+      <button id="resetRegistrations" class="btn danger" type="button">
+        Reset Registrations
+      </button>
+
+      <button id="openSettings" class="btn secondary" type="button">
+        Registration Controls
+      </button>
+
+      <button id="openFinance" class="btn secondary" type="button">
+        Finance Verification
+      </button>
+
+      <button id="logout" class="btn secondary" type="button">
+        Log out
+      </button>
+    </div>
   </div>
 </header>
 
@@ -167,7 +216,14 @@ main{max-width:1150px;margin:auto;padding:22px 16px 60px}
       </div>
 
       <label for="overallRegistrationLimit">Overall registration limit</label>
-      <input id="overallRegistrationLimit" type="number" min="1" step="1">
+      <input
+        id="overallRegistrationLimit"
+        class="readonly-field"
+        type="number"
+        min="1"
+        step="1"
+        readonly
+        title="Automatically calculated from the unit limits">
 
       <h3 style="color:#5b1730;margin:22px 0 8px">
         Payment Details
@@ -230,43 +286,25 @@ main{max-width:1150px;margin:auto;padding:22px 16px 60px}
 
   </div>
 
-  <section id="financePage" class="hidden">
-  <header>
-    <div class="head">
-      <div>
-        <h1>Finance Verification</h1>
-        <p>Pending payment receipts</p>
-      </div>
-      <button id="backFromFinance" class="btn secondary" type="button">
-        Back to Dashboard
-      </button>
-    </div>
-  </header>
-
-  <main>
-    <div id="financeMessage"></div>
-
-    <div class="card">
-      <h2 style="margin-top:0;color:#5b1730">Finance Access</h2>
-      <p class="sub">
-        Enter the Finance Verification PIN to view and manage pending payment receipts.
+  <section id="financePage" class="section hidden">
+  <div class="section-card-head">
+    <div>
+      <h2 style="margin:0;color:#5b1730">Finance Verification</h2>
+      <p class="sub" style="margin:6px 0 0">
+        Review submitted payment receipts and confirm registrations.
       </p>
-
-      <label for="financePin">Finance Verification PIN</label>
-      <input id="financePin" class="pin" type="password" inputmode="numeric"
-             autocomplete="off" placeholder="Enter Finance PIN">
-
-      <button id="unlockFinance" class="btn" type="button">
-        Open Pending Receipts
-      </button>
     </div>
 
-    <div id="financeReceipts" class="hidden" style="margin-top:18px">
-      <div id="receipts"></div>
-    </div>
-  </main>
-</section>
-</main>
+    <button id="backFromFinance" class="btn secondary" type="button">
+      Back to Dashboard
+    </button>
+  </div>
+
+  <div id="financeMessage"></div>
+
+  <div id="financeReceipts">
+    <div id="receipts"></div>
+  </div>
 </section>
 
 <section id="participantsPage" class="hidden">
@@ -356,9 +394,6 @@ async function loadRegistrationSettings(){
     const d = await api("/api/admin/registration-settings");
     const settings = d.settings;
 
-    $("overallRegistrationLimit").value =
-      settings.overallLimit || "";
-
     const closeAt = settings.closeAt
       ? new Date(settings.closeAt)
       : null;
@@ -414,10 +449,32 @@ async function loadRegistrationSettings(){
         </div>
       `).join("");
 
+    updateOverallLimitFromUnits();
+
+    document.querySelectorAll(".unit-limit-input").forEach(input=>{
+      input.addEventListener("input", updateOverallLimitFromUnits);
+      input.addEventListener("change", updateOverallLimitFromUnits);
+    });
+
   }catch(err){
     $("settingsMessage").innerHTML =
       `<div class="error">${esc(err.message)}</div>`;
   }
+}
+
+function updateOverallLimitFromUnits(){
+  let total = 0;
+
+  document.querySelectorAll(".unit-limit-input").forEach(input=>{
+    const value = Number(input.value);
+
+    if(Number.isInteger(value) && value > 0){
+      total += value;
+    }
+  });
+
+  $("overallRegistrationLimit").value =
+    total > 0 ? total : "";
 }
 
 async function saveRegistrationSettings(){
@@ -436,15 +493,6 @@ async function saveRegistrationSettings(){
     closeAt = `${date}T${time}:00+01:00`;
   }
 
-  const overallLimit =
-    Number($("overallRegistrationLimit").value);
-
-  if(!Number.isInteger(overallLimit) || overallLimit < 1){
-    $("settingsMessage").innerHTML =
-      '<div class="error">Overall limit must be a positive whole number.</div>';
-    return;
-  }
-
   const unitLimits = {};
 
   document.querySelectorAll(".unit-limit-input").forEach(input=>{
@@ -460,6 +508,14 @@ async function saveRegistrationSettings(){
       '<div class="error">Every unit limit must be a positive whole number.</div>';
     return;
   }
+
+  const overallLimit =
+    Object.values(unitLimits).reduce(
+      (total, value) => total + Number(value),
+      0
+    );
+
+  updateOverallLimitFromUnits();
 
   try{
     const d = await api(
@@ -578,47 +634,27 @@ async function loadStats(){
   $("message").innerHTML=`<div class="error">${esc(err.message)}</div>`;
  }
 }
-async function unlockFinance(){
-  const pin = $("financePin").value.trim();
 
-  if(!pin){
-    $("financeMessage").innerHTML =
-      '<div class="error">Finance Verification PIN is required.</div>';
-    return;
-  }
-
-  $("financeMessage").innerHTML = "";
+async function openFinancePage(){
+  showAdminPage("finance");
+  $("financeMessage").innerHTML =
+    '<div class="card">Loading pending payment receipts...</div>';
 
   try{
-    const d = await api(
-      "/api/admin/pending-verifications?pin=" +
-      encodeURIComponent(pin)
-    );
-
-    $("financeReceipts").classList.remove("hidden");
-    renderReceipts(d.units, pin);
-
+    const d = await api("/api/admin/pending-verifications");
+    $("financeMessage").innerHTML = "";
+    renderReceipts(d.units);
   }catch(err){
-    $("financeReceipts").classList.add("hidden");
     $("financeMessage").innerHTML =
       `<div class="error">${esc(err.message)}</div>`;
   }
-}
-
-function openFinancePage(){
-  showAdminPage("finance");
-
-  $("financeMessage").innerHTML = "";
-  $("financeReceipts").classList.add("hidden");
-  $("financePin").value = "";
-  $("financePin").focus();
 }
 
 function backFromFinance(){
   showAdminPage("home");
 }
 
-function renderReceipts(units,pin){
+function renderReceipts(units){
   $("receipts").innerHTML =
     Object.entries(units).map(([unit,items]) => `
       <div class="unit">
@@ -643,19 +679,19 @@ function renderReceipts(units,pin){
               <div class="actions">
                 <button
                   class="btn secondary"
-                  onclick="viewReceipt('${encodeURIComponent(r.reference)}','${encodeURIComponent(pin)}')">
+                  onclick="viewReceipt('${encodeURIComponent(r.reference)}')">
                   View Receipt
                 </button>
 
                 <button
                   class="btn"
-                  onclick="approve('${encodeURIComponent(r.reference)}','${encodeURIComponent(pin)}')">
+                  onclick="approve('${encodeURIComponent(r.reference)}')">
                   Approve
                 </button>
 
                 <button
                   class="btn danger"
-                  onclick="reject('${encodeURIComponent(r.reference)}','${encodeURIComponent(pin)}')">
+                  onclick="reject('${encodeURIComponent(r.reference)}')">
                   Reject
                 </button>
               </div>
@@ -667,10 +703,10 @@ function renderReceipts(units,pin){
     '<div class="card empty">No receipts are currently awaiting verification.</div>';
 }
 
-async function viewReceipt(ref,pin){
+async function viewReceipt(ref){
   try{
     const d = await api(
-      "/api/admin/receipt/" + ref + "?pin=" + pin
+      "/api/admin/receipt/" + ref
     );
 
     window.open(d.url,"_blank","noopener");
@@ -680,7 +716,7 @@ async function viewReceipt(ref,pin){
   }
 }
 
-async function approve(ref,pin){
+async function approve(ref){
   if(!confirm("Confirm that Finance has verified this payment?")) return;
 
   try{
@@ -689,9 +725,7 @@ async function approve(ref,pin){
       {
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-          pin:decodeURIComponent(pin)
-        })
+        body:JSON.stringify({})
       }
     );
 
@@ -701,10 +735,10 @@ async function approve(ref,pin){
     loadStats();
 
     const d = await api(
-      "/api/admin/pending-verifications?pin=" + pin
+      "/api/admin/pending-verifications"
     );
 
-    renderReceipts(d.units,pin);
+    renderReceipts(d.units);
 
   }catch(err){
     $("financeMessage").innerHTML =
@@ -712,7 +746,7 @@ async function approve(ref,pin){
   }
 }
 
-async function reject(ref,pin){
+async function reject(ref){
   const reason = prompt(
     "Enter the reason for rejecting this payment:"
   );
@@ -726,7 +760,6 @@ async function reject(ref,pin){
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
-          pin:decodeURIComponent(pin),
           reason
         })
       }
@@ -738,10 +771,10 @@ async function reject(ref,pin){
     loadStats();
 
     const d = await api(
-      "/api/admin/pending-verifications?pin=" + pin
+      "/api/admin/pending-verifications"
     );
 
-    renderReceipts(d.units,pin);
+    renderReceipts(d.units);
 
   }catch(err){
     $("financeMessage").innerHTML =
@@ -753,10 +786,7 @@ $("loginForm").addEventListener("submit",login);
 $("openFinance").addEventListener("click",openFinancePage);
 $("openSettings").addEventListener("click",()=>showAdminPage("settings"));
 $("backFromFinance").addEventListener("click",backFromFinance);
-$("unlockFinance").addEventListener("click",unlockFinance);
 
-$("financePin").addEventListener("keydown",e=>{
-  if(e.key==="Enter") unlockFinance();
 });
 
   $("backFromSettings").addEventListener("click",()=>showAdminPage("home"));

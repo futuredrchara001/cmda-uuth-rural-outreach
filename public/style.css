@@ -676,3 +676,895 @@ footer {
     text-align: left;
   }
 }
+
+/* =========================================================
+   CMDA-UUTH REGISTRATION JOURNEY
+   Post-registration screens only.
+   Does NOT modify the participant registration page.
+========================================================= */
+
+.status-card {
+  width: min(790px, 92%);
+  margin: 55px auto 90px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #e6d9d3;
+  border-radius: 28px;
+  background: #fffdfa;
+  box-shadow: 0 24px 65px rgba(61, 39, 47, 0.10);
+}
+
+/* =========================
+   JOURNEY HEADER
+========================= */
+
+.status-card-header {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 34px 34px 30px;
+  background:
+    radial-gradient(circle at 90% 0%, rgba(201,164,106,0.18), transparent 34%),
+    linear-gradient(135deg, #38242d 0%, #4a2936 58%, #69374c 100%);
+  color: white;
+}
+
+.status-card-header::after {
+  content: "";
+  position: absolute;
+  left: 34px;
+  bottom: 0;
+  width: 55px;
+  height: 3px;
+  border-radius: 99px;
+  background: #c9a46a;
+}
+
+.status-indicator {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  margin-top: 2px;
+  border: 1px solid rgba(255,255,255,0.22);
+  border-radius: 50%;
+  background: rgba(255,255,255,0.08);
+}
+
+.status-indicator-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #dcb3c1;
+  box-shadow: 0 0 0 6px rgba(220,179,193,0.10);
+}
+
+.status-card-header h2 {
+  font-family: "Playfair Display", serif;
+  font-size: clamp(1.75rem, 6vw, 2.45rem);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.status-card-header p {
+  max-width: 570px;
+  margin-top: 8px;
+  color: rgba(255,255,255,0.74);
+  font-size: 0.84rem;
+  line-height: 1.65;
+}
+
+/* =========================
+   REFERENCE
+========================= */
+
+.reference-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  margin: 25px 30px 0;
+  padding: 15px 17px;
+  border: 1px solid #e7ddd8;
+  border-radius: 15px;
+  background: #f8f2ed;
+}
+
+.reference-label {
+  display: block;
+  margin-bottom: 3px;
+  color: #8b3f58;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.reference-card strong {
+  color: #38242d;
+  font-size: 0.92rem;
+  letter-spacing: 0.03em;
+}
+
+.copy-button {
+  min-height: 35px;
+  padding: 0 13px;
+  border: 1px solid #dbcbd0;
+  border-radius: 9px;
+  background: white;
+  color: #8b3f58;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.copy-button:hover {
+  border-color: #9a4662;
+  background: #f9f0f3;
+}
+
+.copy-button.small {
+  min-height: 32px;
+}
+
+/* =========================
+   THREE-STAGE JOURNEY
+========================= */
+
+.status-progress {
+  position: relative;
+  margin: 28px 30px 0;
+  padding: 21px 20px;
+  border: 1px solid #eadfd9;
+  border-radius: 19px;
+  background: #fffaf7;
+}
+
+.progress-step {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.progress-number {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #d8c8cd;
+  border-radius: 50%;
+  background: white;
+  color: #8b3f58;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.progress-step.completed .progress-number {
+  border-color: #4d6a54;
+  background: #4d6a54;
+  color: white;
+}
+
+.progress-step.current .progress-number {
+  border-color: #9a4662;
+  background: #f3e2e8;
+  color: #8b3f58;
+  box-shadow: 0 0 0 5px rgba(154,70,98,0.08);
+}
+
+.progress-step strong {
+  display: block;
+  color: #44343b;
+  font-size: 0.79rem;
+}
+
+.progress-step small {
+  display: block;
+  margin-top: 2px;
+  color: #887b80;
+  font-size: 0.69rem;
+  line-height: 1.45;
+}
+
+.progress-line {
+  width: 1px;
+  height: 18px;
+  margin: 0 0 0 14px;
+  background: #dfd4d0;
+}
+
+.progress-line.completed {
+  background: #7b9881;
+}
+
+/* =========================
+   GENERAL CONTENT
+========================= */
+
+.status-section {
+  margin: 27px 30px 0;
+}
+
+.status-section h3,
+.receipt-upload-card h3,
+.verification-message h3,
+.rejection-box h3 {
+  color: #38242d;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.status-intro {
+  margin-top: 7px;
+  color: #756a6f;
+  font-size: 0.78rem;
+  line-height: 1.65;
+}
+
+/* =========================
+   PAYMENT SCREEN
+========================= */
+
+.payment-instruction-card {
+  margin-top: 18px;
+  overflow: hidden;
+  border: 1px solid #e6dad5;
+  border-radius: 20px;
+  background: white;
+}
+
+.payment-amount {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 21px 20px;
+  background:
+    linear-gradient(135deg, #f8eee9, #f5e7e9);
+  border-bottom: 1px solid #eadbd7;
+}
+
+.payment-amount span {
+  color: #8b3f58;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.payment-amount strong {
+  font-family: "Playfair Display", serif;
+  color: #38242d;
+  font-size: 1.9rem;
+}
+
+.payment-details {
+  padding: 5px 20px;
+}
+
+.payment-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 58px;
+  border-bottom: 1px solid #eee5e1;
+}
+
+.payment-row:last-child {
+  border-bottom: none;
+}
+
+.payment-row > span {
+  color: #83777c;
+  font-size: 0.72rem;
+}
+
+.payment-row > strong,
+.payment-account strong {
+  color: #38242d;
+  font-size: 0.82rem;
+  text-align: right;
+}
+
+.payment-account {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.payment-instructions {
+  margin: 10px;
+  padding: 15px;
+  border-radius: 13px;
+  background: #f4f7f2;
+}
+
+.payment-instructions span {
+  display: block;
+  color: #4d6a54;
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.payment-instructions p {
+  margin-top: 5px;
+  color: #5f6861;
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+/* =========================
+   PRIMARY JOURNEY ACTION
+========================= */
+
+.status-action-card {
+  margin: 23px 30px 0;
+}
+
+.status-action-card .primary-button {
+  width: 100%;
+  justify-content: center;
+  margin-top: 0;
+  min-height: 55px;
+  border-radius: 13px;
+  background: #8b3f58;
+}
+
+.status-action-card .primary-button:hover {
+  background: #743349;
+}
+
+/* =========================
+   RECEIPT UPLOAD
+========================= */
+
+.receipt-upload-card {
+  margin: 27px 30px 0;
+  padding: 22px;
+  border: 1px solid #e5d9d4;
+  border-radius: 20px;
+  background: #fff;
+}
+
+.receipt-heading {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.receipt-heading::before {
+  content: "02";
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 31px;
+  height: 31px;
+  border-radius: 9px;
+  background: #f0e4e8;
+  color: #8b3f58;
+  font-size: 0.65rem;
+  font-weight: 800;
+}
+
+.receipt-heading h3 {
+  margin-top: 2px;
+}
+
+.receipt-heading p {
+  margin-top: 5px;
+  color: #756a6f;
+  font-size: 0.76rem;
+  line-height: 1.55;
+}
+
+.receipt-limit-note {
+  margin-top: 7px !important;
+  color: #9a8b90 !important;
+  font-size: 0.65rem !important;
+}
+
+.receipt-transaction-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 13px;
+  margin-top: 22px;
+}
+
+.receipt-field-label {
+  display: block;
+  margin-bottom: 7px;
+  color: #46383e;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.receipt-date-input,
+.receipt-time-input {
+  min-height: 49px;
+  border-radius: 11px;
+}
+
+.receipt-file-label {
+  display: flex;
+  align-items: center;
+  min-height: 57px;
+  margin-top: 16px;
+  padding: 0 15px;
+  border: 1.5px dashed #cdbdc2;
+  border-radius: 12px;
+  background: #fcf8f5;
+  color: #756a6f;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.receipt-file-label:hover {
+  border-color: #9a4662;
+  background: #faf1f4;
+}
+
+.receipt-file-label input {
+  display: none;
+}
+
+.receipt-submit-button {
+  width: 100%;
+  min-height: 53px;
+  margin-top: 14px;
+  border: none;
+  border-radius: 12px;
+  background: #8b3f58;
+  color: white;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.receipt-submit-button:hover {
+  background: #743349;
+  transform: translateY(-1px);
+}
+
+.upload-message {
+  margin-top: 9px;
+  color: #8b3f58;
+  font-size: 0.72rem;
+  text-align: center;
+}
+
+/* =========================
+   WAITING / VERIFICATION
+========================= */
+
+.verification-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  margin: 27px 30px 0;
+  padding: 20px;
+  border: 1px solid #dfe7df;
+  border-radius: 19px;
+  background: #f4f7f2;
+}
+
+.verification-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #d9e5da;
+}
+
+.verification-icon span::before {
+  content: "✓";
+  color: #4d6a54;
+  font-weight: 900;
+}
+
+.verification-message p {
+  margin-top: 5px;
+  color: #637067;
+  font-size: 0.76rem;
+  line-height: 1.65;
+}
+
+.patience-box {
+  margin: 18px 30px 0;
+  padding: 16px 17px;
+  border-left: 3px solid #c9a46a;
+  border-radius: 0 12px 12px 0;
+  background: #faf5ee;
+}
+
+.patience-box strong {
+  color: #604936;
+  font-size: 0.72rem;
+}
+
+.patience-box p {
+  margin-top: 4px;
+  color: #796d65;
+  font-size: 0.72rem;
+  line-height: 1.6;
+}
+
+/* =========================
+   REJECTION
+========================= */
+
+.status-rejected .status-indicator-dot {
+  background: #c9a46a;
+  box-shadow: 0 0 0 6px rgba(201,164,106,0.10);
+}
+
+.rejection-box {
+  margin: 27px 30px 0;
+  padding: 19px;
+  border: 1px solid #ead8c8;
+  border-radius: 18px;
+  background: #fcf5ed;
+}
+
+.rejection-box h3 {
+  color: #765039;
+}
+
+.rejection-box p {
+  margin-top: 7px;
+  color: #745f53;
+  font-size: 0.78rem;
+  line-height: 1.65;
+}
+
+/* =========================
+   CONFIRMED
+========================= */
+
+.status-confirmed {
+  border-color: #d7e2d8;
+}
+
+.status-confirmed .status-card-header {
+  background:
+    radial-gradient(circle at 90% 0%, rgba(201,164,106,0.22), transparent 35%),
+    linear-gradient(135deg, #38242d, #4a2936 60%, #526b58);
+}
+
+.status-confirmed .status-indicator-dot {
+  background: #d9e5da;
+  box-shadow: 0 0 0 6px rgba(217,229,218,0.12);
+}
+
+.success-confirmation {
+  margin: 28px 30px 0;
+  padding: 30px 23px;
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(201,164,106,0.15), transparent 42%),
+    #38242d;
+  color: white;
+  text-align: center;
+}
+
+.success-mark {
+  width: 60px;
+  height: 60px;
+  margin: 0 auto 17px;
+  background: #d9e5da;
+  color: #4d6a54;
+}
+
+.success-mark span::before {
+  content: "✓";
+}
+
+.success-confirmation h3 {
+  font-family: "Playfair Display", serif;
+  color: white;
+  font-size: clamp(1.65rem, 6vw, 2.2rem);
+}
+
+.success-confirmation > p {
+  max-width: 480px;
+  margin: 9px auto 0;
+  color: rgba(255,255,255,0.72);
+  font-size: 0.77rem;
+}
+
+.confirmed-details {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.confirmed-details > div {
+  padding: 13px 9px;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.06);
+}
+
+.confirmed-details span {
+  display: block;
+  color: #dcb3c1;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.confirmed-details strong {
+  display: block;
+  margin-top: 5px;
+  color: white;
+  font-size: 0.72rem;
+  word-break: break-word;
+}
+
+.whatsapp-confirmation {
+  margin: 20px 30px 0;
+  padding: 21px;
+  border: 1px solid #d7e2d8;
+  border-radius: 19px;
+  background: #f3f7f3;
+  text-align: center;
+}
+
+.whatsapp-confirmation h3 {
+  color: #38523d;
+  font-size: 0.96rem;
+}
+
+.whatsapp-confirmation p {
+  max-width: 470px;
+  margin: 5px auto 0;
+  color: #637067;
+  font-size: 0.74rem;
+  line-height: 1.55;
+}
+
+.whatsapp-button {
+  min-height: 50px;
+  margin-top: 16px;
+  padding: 0 22px;
+  border: none;
+  border-radius: 11px;
+  background: #4d6a54;
+  color: white;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.whatsapp-button:hover {
+  background: #3e5845;
+  transform: translateY(-1px);
+}
+
+/* =========================
+   META
+========================= */
+
+.status-meta {
+  margin: 21px 30px 28px;
+  padding-top: 15px;
+  border-top: 1px solid #eee5e1;
+  color: #9a8d92;
+  font-size: 0.66rem;
+  text-align: center;
+}
+
+/* =========================
+   MOBILE
+========================= */
+
+@media (max-width: 600px) {
+
+  .status-card {
+    width: 94%;
+    margin: 25px auto 60px;
+    border-radius: 22px;
+  }
+
+  .status-card-header {
+    padding: 27px 21px 25px;
+    gap: 12px;
+  }
+
+  .status-card-header::after {
+    left: 21px;
+  }
+
+  .status-indicator {
+    width: 36px;
+    height: 36px;
+  }
+
+  .status-card-header h2 {
+    font-size: 1.72rem;
+  }
+
+  .status-card-header p {
+    font-size: 0.75rem;
+  }
+
+  .reference-card,
+  .status-progress,
+  .status-section,
+  .status-action-card,
+  .receipt-upload-card,
+  .verification-message,
+  .rejection-box,
+  .success-confirmation,
+  .whatsapp-confirmation {
+    margin-left: 17px;
+    margin-right: 17px;
+  }
+
+  .reference-card {
+    margin-top: 18px;
+  }
+
+  .status-progress {
+    padding: 17px 15px;
+    margin-top: 18px;
+  }
+
+  .payment-amount {
+    padding: 18px 16px;
+  }
+
+  .payment-amount strong {
+    font-size: 1.65rem;
+  }
+
+  .payment-details {
+    padding: 3px 16px;
+  }
+
+  .payment-row {
+    min-height: 55px;
+    gap: 12px;
+  }
+
+  .payment-row > span {
+    font-size: 0.67rem;
+  }
+
+  .payment-row > strong,
+  .payment-account strong {
+    font-size: 0.76rem;
+  }
+
+  .payment-account {
+    gap: 6px;
+  }
+
+  .payment-instructions {
+    margin: 8px;
+  }
+
+  .receipt-upload-card {
+    padding: 18px;
+  }
+
+  .receipt-transaction-fields {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .confirmed-details {
+    grid-template-columns: 1fr;
+  }
+
+  .success-confirmation {
+    padding: 27px 18px;
+  }
+
+  .status-meta {
+    margin-left: 17px;
+    margin-right: 17px;
+  }
+}
+
+
+/* ======================================================
+   LANDING PAGE
+   ====================================================== */
+
+.landing-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 70px 20px;
+  text-align: center;
+}
+
+.landing-content {
+  width: min(720px, 94%);
+  margin: 0 auto;
+}
+
+.landing-eyebrow {
+  margin: 0 0 18px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.landing-content h1 {
+  margin: 0;
+  font-family: "Playfair Display", serif;
+  font-size: clamp(2.5rem, 8vw, 5.2rem);
+  line-height: 1.02;
+}
+
+.landing-text {
+  width: min(590px, 100%);
+  margin: 24px auto 0;
+  font-size: 1.05rem;
+  line-height: 1.75;
+}
+
+.landing-actions {
+  width: min(430px, 100%);
+  margin: 36px auto 0;
+  display: grid;
+  gap: 13px;
+}
+
+.landing-primary-button,
+.landing-secondary-button {
+  width: 100%;
+  min-height: 56px;
+  border-radius: 14px;
+  padding: 14px 20px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.landing-primary-button {
+  border: none;
+}
+
+.landing-secondary-button {
+  background: transparent;
+  border: 1px solid currentColor;
+}
+
+.landing-note {
+  width: min(520px, 100%);
+  margin: 20px auto 0;
+  font-size: 0.84rem;
+  line-height: 1.6;
+  opacity: 0.72;
+}
+
+/* Registration is hidden until Begin Registration is selected. */
+.registration {
+  display: none;
+}

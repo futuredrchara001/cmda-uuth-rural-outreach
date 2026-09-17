@@ -200,7 +200,8 @@ let currentStage = "payment";
       $("#registrationStatusView");
 
     if (statusView) {
-      statusView.remove();
+      statusView.innerHTML = "";
+      statusView.style.display = "";
     }
   }
 
@@ -311,14 +312,23 @@ let currentStage = "payment";
   function renderReferenceCard(
     registration
   ) {
+    const isSuccessful =
+      registration.paymentStatus === "success";
+
     const reference =
-      registration.reference || "";
+      isSuccessful
+        ? (registration.reference || "")
+        : (
+            registration.pendingReference ||
+            registration.reference ||
+            ""
+          );
 
     return `
       <div class="reference-card">
         <div>
           <span class="reference-label">
-            Registration Reference
+            ${registration.paymentStatus === "success" ? "Registration Reference" : "Pending CMDA Reference"}
           </span>
 
           <strong>
@@ -404,55 +414,36 @@ let currentStage = "payment";
     `;
   }
 
-  function renderPaymentDetails(
-    payment
-  ) {
+  function renderPaymentDetails(payment) {
     return `
       <div class="payment-instruction-card">
-
         <div class="payment-amount">
           <span>Registration Fee</span>
-          <strong>
-            ${formatAmount(payment.amount)}
-          </strong>
+          <strong>${formatAmount(payment.amount)}</strong>
         </div>
 
         <div class="payment-details">
-
           <div class="payment-row">
             <span>Payment Method</span>
-            <strong>
-              ${escapeHtml(payment.method)}
-            </strong>
+            <strong>${escapeHtml(payment.method)}</strong>
           </div>
 
           <div class="payment-row">
             <span>Account Name</span>
-            <strong>
-              ${escapeHtml(
-                payment.accountName || "—"
-              )}
-            </strong>
+            <strong>${escapeHtml(payment.accountName || "—")}</strong>
           </div>
 
           <div class="payment-row">
             <span>Account Number</span>
             <div class="payment-account">
-              <strong>
-                ${escapeHtml(
-                  payment.accountNumber || "—"
-                )}
-              </strong>
-
+              <strong>${escapeHtml(payment.accountNumber || "—")}</strong>
               ${
                 payment.accountNumber
                   ? `
                     <button
                       type="button"
                       class="copy-button small"
-                      data-copy="${escapeHtml(
-                        payment.accountNumber
-                      )}"
+                      data-copy="${escapeHtml(payment.accountNumber)}"
                     >
                       Copy
                     </button>
@@ -461,18 +452,12 @@ let currentStage = "payment";
               }
             </div>
           </div>
-
         </div>
 
         <div class="payment-instructions">
-          <span>Payment Instructions</span>
-          <p>
-            ${escapeHtml(
-              payment.instructions || ""
-            )}
-          </p>
+          <span>How to complete your payment</span>
+          <p>${escapeHtml(payment.instructions || "")}</p>
         </div>
-
       </div>
     `;
   }
@@ -483,12 +468,10 @@ let currentStage = "payment";
   ) {
     return `
       ${renderHeader(
-        "Complete Your Payment",
-        "Your registration has been saved. The next step is payment.",
+        "Make Your Registration Payment",
+        "Your registration is saved. Make your payment using the details below, then upload your receipt.",
         "status-pending"
       )}
-
-      ${renderReferenceCard(registration)}
 
       ${renderProgress("pending")}
 
@@ -508,7 +491,7 @@ let currentStage = "payment";
           class="primary-button"
           id="iHavePaidButton"
         >
-          I Have Paid
+          I've Made the Payment
         </button>
       </div>
 
@@ -1534,11 +1517,22 @@ let currentStage = "payment";
     }
 
     try {
+      const isEditing =
+        !!currentReference &&
+        !!currentStatusData;
+
       const response =
         await fetch(
-          "/api/register",
+          isEditing
+            ? `/api/registration/${encodeURIComponent(
+                currentReference
+              )}`
+            : "/api/register",
           {
-            method: "POST",
+            method:
+              isEditing
+                ? "PUT"
+                : "POST",
             headers: {
               "Content-Type":
                 "application/json",
@@ -1554,6 +1548,17 @@ let currentStage = "payment";
         await response.json();
 
       if (!response.ok || !data.success) {
+        if (data.duplicate) {
+          const existingReference =
+            data.reference || "";
+
+          throw new Error(
+            existingReference
+              ? `An existing registration was found with this phone number and email. Your reference is ${existingReference}. Please use Continue Existing Registration to continue.`
+              : "An existing registration was found with these contact details. Please use Continue Existing Registration to continue."
+          );
+        }
+
         throw new Error(
           data.message ||
           "Registration could not be completed."
@@ -1619,55 +1624,195 @@ let currentStage = "payment";
     currentReference =
       savedReference;
 
-    await loadRegistrationStatus(
-      savedReference,
-      false
-    );
+    /*
+    A saved registration is remembered for convenience,
+    but the landing-page Begin Registration button must
+    always open the participant details form.
+
+    We load the saved data silently so the participant can
+    continue editing the SAME registration.
+    */
+    try {
+      const response =
+        await fetch(
+          `/api/registration-status?reference=${encodeURIComponent(
+            savedReference
+          )}`,
+          {
+            method: "GET",
+            headers: {
+              Accept: "application/json"
+            }
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (!response.ok || !data.success) {
+        return;
+      }
+
+      currentStatusData = data;
+
+      populateRegistrationForm(
+        data.registration || {}
+      );
+    } catch (error) {
+      console.error(
+        "Saved registration preload error:",
+        error
+      );
+    }
   }
 
   /*
   ======================================================
-  BEGIN REGISTRATION BUTTONS
+  POPULATE SAVED REGISTRATION FORM
   ======================================================
   */
 
-  function attachBeginButtons() {
-    document
-      .querySelectorAll(
-        "[data-begin-registration], .begin-registration, #beginRegistration"
-      )
-      .forEach((button) => {
-        button.addEventListener(
-          "click",
-          async (event) => {
-            event.preventDefault();
+  function populateRegistrationForm(
+    registration
+  ) {
+    if (!registrationForm) return;
 
-            const savedReference =
-              getSavedReference();
+    const fields = [
+      "fullName",
+      "phone",
+      "email",
+      "gender",
+      "institution",
+      "level",
+      "faculty",
+      "department",
+      "cmda",
+      "previousOutreach",
+      "unit"
+    ];
 
-            if (savedReference) {
-              await loadRegistrationStatus(
-                savedReference,
-                true
-              );
-            } else {
-              showRegistrationForm();
+    fields.forEach((name) => {
+      const field =
+        registrationForm.elements[name];
 
-              const target =
-                registrationForm ||
-                document.querySelector(
-                  ".registration"
-                );
+      if (!field) return;
 
-              if (target) {
-                target.scrollIntoView({
-                  behavior: "smooth"
-                });
-              }
-            }
-          }
-        );
+      const value =
+        registration[name];
+
+      if (value !== undefined && value !== null) {
+        field.value = value;
+      }
+    });
+  }
+
+  /*
+  ======================================================
+  LANDING PAGE NAVIGATION
+  ======================================================
+  */
+
+  function showLandingPage() {
+    const landing = document.querySelector("#landingPage");
+    const registration = document.querySelector("#registration");
+    const statusView = document.querySelector("#registrationStatusView");
+
+    if (landing) landing.style.display = "";
+    if (registration) registration.style.display = "none";
+
+    if (statusView) {
+      statusView.innerHTML = "";
+      statusView.style.display = "none";
+    }
+
+    stopStatusPolling();
+    currentReference = null;
+    currentStatusData = null;
+    currentStage = "payment";
+  }
+
+  function showFreshRegistration() {
+    clearSavedReference();
+    stopStatusPolling();
+
+    currentStatusData = null;
+    currentStage = "payment";
+
+    if (registrationForm) {
+      registrationForm.reset();
+      registrationForm.style.display = "";
+    }
+
+    const landing = document.querySelector("#landingPage");
+    if (landing) landing.style.display = "none";
+
+    const statusView = document.querySelector("#registrationStatusView");
+    if (statusView) {
+      statusView.innerHTML = "";
+      statusView.style.display = "none";
+    }
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth"
+    });
+
+    if (registrationForm) {
+      registrationForm.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
       });
+    }
+  }
+
+  function showContinueRegistration() {
+    const reference =
+      window.prompt(
+        "Enter your pending CMDA reference:",
+        ""
+      );
+
+    if (!reference || !reference.trim()) {
+      return;
+    }
+
+    const cleanReference =
+      reference.trim().toUpperCase();
+
+    currentReference = cleanReference;
+
+    loadRegistrationStatus(
+      cleanReference,
+      true
+    );
+  }
+
+  function attachLandingButtons() {
+    const beginButton =
+      document.querySelector("#beginRegistration");
+
+    const continueButton =
+      document.querySelector("#continueRegistration");
+
+    if (beginButton) {
+      beginButton.addEventListener(
+        "click",
+        (event) => {
+          event.preventDefault();
+          showFreshRegistration();
+        }
+      );
+    }
+
+    if (continueButton) {
+      continueButton.addEventListener(
+        "click",
+        (event) => {
+          event.preventDefault();
+          showContinueRegistration();
+        }
+      );
+    }
   }
 
   /*
@@ -1684,9 +1829,13 @@ let currentStage = "payment";
       );
     }
 
-    attachBeginButtons();
+    attachLandingButtons();
 
-    checkSavedRegistration();
+    const landing = document.querySelector("#landingPage");
+
+    if (landing) {
+      showLandingPage();
+    }
   }
 if (
     document.readyState ===

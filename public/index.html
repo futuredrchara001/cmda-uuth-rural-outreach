@@ -26,6 +26,59 @@
 
   <main>
 
+    <!-- LANDING PAGE -->
+    <section id="landingPage" class="landing-page">
+
+      <div class="landing-content">
+
+        <p class="landing-eyebrow">
+          CMDA-UUTH RURAL OUTREACH 2026
+        </p>
+
+        <h1>
+          Serve. Learn.<br>
+          Make a Difference.
+        </h1>
+
+        <p class="landing-text">
+          Welcome to the CMDA-UUTH Rural Outreach 2026 registration portal.
+          Register to join us as we serve and care for our community together.
+        </p>
+
+        <div class="landing-actions">
+
+          <button
+            type="button"
+            id="beginRegistration"
+            class="landing-primary-button"
+          >
+            Begin Registration
+          </button>
+
+          <button
+            type="button"
+            id="continueRegistration"
+            class="landing-secondary-button"
+          >
+            Continue Existing Registration
+          </button>
+
+        </div>
+
+        <p class="landing-note">
+          Already started a registration or submitted a payment receipt?
+          Continue with your existing CMDA reference.
+        </p>
+
+      </div>
+
+    </section>
+
+    <section
+      id="registrationStatusView"
+      class="registration-status-view"
+    ></section>
+
     <!-- REGISTRATION -->
     <section class="registration" id="registration">
 
@@ -98,22 +151,7 @@
 
 
             <div class="field">
-              <div class="field">
-              <label for="accountName">Account Name Used for Payment</label>
-              <input
-                type="text"
-                id="accountName"
-                name="accountName"
-                placeholder="Name on the account used for payment"
-                required
-                autocomplete="name"
-              >
-              <p class="field-description">
-                Enter the name on the bank account used to make your registration payment.
-              </p>
-            </div>
-
-            <label for="gender">Gender</label>
+              <label for="gender">Gender</label>
 
               <select id="gender" name="gender" required>
                 <option value="">Select</option>

@@ -65,6 +65,7 @@ function fromDatabase(row) {
   return {
     id: row.id,
     reference: row.reference,
+    pendingReference: row.pending_reference || null,
     accountName: row.account_name || null,
     fullName: row.full_name,
     phone: row.phone,
@@ -96,6 +97,8 @@ function toDatabase(registration) {
   return {
     id: registration.id,
     reference: registration.reference,
+    pending_reference:
+      registration.pendingReference || null,
     account_name: registration.accountName || null,
     full_name: registration.fullName,
     phone: registration.phone,
@@ -266,11 +269,6 @@ async function updateRegistrationSettings(updates = {}) {
         ? updates.closeAt
         : current.closeAt,
 
-    overallLimit:
-      updates.overallLimit !== undefined
-        ? Number(updates.overallLimit)
-        : current.overallLimit,
-
     unitLimits: {
       ...current.unitLimits,
       ...(updates.unitLimits || {})
@@ -281,6 +279,21 @@ async function updateRegistrationSettings(updates = {}) {
       ...(updates.payment || {})
     }
   };
+
+  // The overall registration capacity is always the sum
+  // of the individual unit capacities.
+  for (const [unit, limit] of Object.entries(next.unitLimits)) {
+    if (!Number.isInteger(Number(limit)) || Number(limit) < 1) {
+      throw new Error(
+        `Invalid registration limit for ${unit}.`
+      );
+    }
+
+    next.unitLimits[unit] = Number(limit);
+  }
+
+  next.overallLimit = Object.values(next.unitLimits)
+    .reduce((total, limit) => total + Number(limit), 0);
 
   if (
     next.closeAt !== null &&
@@ -294,16 +307,6 @@ async function updateRegistrationSettings(updates = {}) {
     next.overallLimit < 1
   ) {
     throw new Error("Overall registration limit must be a positive whole number.");
-  }
-
-  for (const [unit, limit] of Object.entries(next.unitLimits)) {
-    if (!Number.isInteger(Number(limit)) || Number(limit) < 1) {
-      throw new Error(
-        `Invalid registration limit for ${unit}.`
-      );
-    }
-
-    next.unitLimits[unit] = Number(limit);
   }
 
   const { data, error } = await db
@@ -426,6 +429,58 @@ async function getRegistrationClosureStatus() {
   };
 }
 
+async function findExistingRegistrationByContact(phone, email) {
+  const client = requireSupabase();
+
+  const normalizedPhone =
+    String(phone || "").trim();
+
+  const normalizedEmail =
+    String(email || "").trim().toLowerCase();
+
+  if (!normalizedPhone && !normalizedEmail) {
+    return null;
+  }
+
+  let query = client
+    .from("registrations")
+    .select("*")
+    .limit(20);
+
+  if (normalizedPhone && normalizedEmail) {
+    query = query.or(
+      `phone.eq.${normalizedPhone},email.eq.${normalizedEmail}`
+    );
+  } else if (normalizedPhone) {
+    query = query.eq("phone", normalizedPhone);
+  } else {
+    query = query.eq("email", normalizedEmail);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw error;
+  }
+
+  const rows = data || [];
+
+  const exactMatch = rows.find((row) => {
+    const rowPhone =
+      String(row.phone || "").trim();
+
+    const rowEmail =
+      String(row.email || "").trim().toLowerCase();
+
+    return (
+      rowPhone === normalizedPhone &&
+      rowEmail === normalizedEmail
+    );
+  });
+
+  return fromDatabase(exactMatch || null);
+}
+
 async function addRegistration(registration) {
   const client = requireSupabase();
 
@@ -439,16 +494,42 @@ async function addRegistration(registration) {
     throw error;
   }
 
-  return fromDatabase(data);
+  const saved = fromDatabase(data);
+
+  /*
+  The database trigger assigns pending_reference.
+  Until Finance approves the payment, that pending
+  reference is also the participant-facing reference.
+  */
+
+  if (
+    saved &&
+    saved.pendingReference &&
+    !saved.reference
+  ) {
+    saved.reference = saved.pendingReference;
+  }
+
+  return saved;
 }
 
 async function findByReference(reference) {
   const client = requireSupabase();
 
+  const cleanReference =
+    String(reference || "").trim();
+
+  if (!cleanReference) {
+    return null;
+  }
+
   const { data, error } = await client
     .from("registrations")
     .select("*")
-    .eq("reference", reference)
+    .or(
+      `reference.eq.${cleanReference},pending_reference.eq.${cleanReference}`
+    )
+    .limit(1)
     .maybeSingle();
 
   if (error) {
@@ -465,6 +546,54 @@ async function updateRegistration(id, updates) {
 
   if ("reference" in updates) {
     databaseUpdates.reference = updates.reference;
+  }
+
+  if ("fullName" in updates) {
+    databaseUpdates.full_name = updates.fullName;
+  }
+
+  if ("phone" in updates) {
+    databaseUpdates.phone = updates.phone;
+  }
+
+  if ("email" in updates) {
+    databaseUpdates.email = updates.email;
+  }
+
+  if ("gender" in updates) {
+    databaseUpdates.gender = updates.gender;
+  }
+
+  if ("institution" in updates) {
+    databaseUpdates.institution = updates.institution;
+  }
+
+  if ("level" in updates) {
+    databaseUpdates.current_level = updates.level;
+  }
+
+  if ("faculty" in updates) {
+    databaseUpdates.faculty = updates.faculty;
+  }
+
+  if ("department" in updates) {
+    databaseUpdates.department = updates.department;
+  }
+
+  if ("cmda" in updates) {
+    databaseUpdates.cmda = updates.cmda;
+  }
+
+  if ("previousOutreach" in updates) {
+    databaseUpdates.previous_outreach = updates.previousOutreach;
+  }
+
+  if ("unit" in updates) {
+    databaseUpdates.unit = updates.unit;
+  }
+
+  if ("accountName" in updates) {
+    databaseUpdates.account_name = updates.accountName;
   }
 
   if ("paymentStatus" in updates) {
@@ -638,6 +767,7 @@ module.exports = {
   updateRegistrationSettings,
   getRegistrationClosureStatus,
   addRegistration,
+  findExistingRegistrationByContact,
   findByReference,
   updateRegistration,
   clearAllRegistrations
