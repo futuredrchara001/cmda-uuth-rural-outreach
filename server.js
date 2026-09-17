@@ -508,6 +508,68 @@ app.get("/api/approved-whatsapp", async (req, res) => {
   }
 });
 
+app.get("/api/registration-recovery", async (req, res) => {
+  try {
+    const email =
+      String(req.query.email || "")
+        .trim()
+        .toLowerCase();
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email address is required."
+      });
+    }
+
+    const { findExistingRegistrationByContact } =
+      require("./registration-store");
+
+    const registration =
+      await findExistingRegistrationByContact(
+        "",
+        email
+      );
+
+    if (!registration) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "No registration was found with that email address."
+      });
+    }
+
+    const reference =
+      registration.reference ||
+      registration.pendingReference ||
+      "";
+
+    if (!reference) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Your registration was found, but its reference is not available yet."
+      });
+    }
+
+    res.json({
+      success: true,
+      reference
+    });
+  } catch (error) {
+    console.error(
+      "Registration recovery error:",
+      error.message
+    );
+
+    res.status(500).json({
+      success: false,
+      message:
+        "Unable to recover your registration right now."
+    });
+  }
+});
+
 app.get("/api/registration-status", async (req, res, next) => {
   if (String(req.query.reference || "").trim()) {
     return next();

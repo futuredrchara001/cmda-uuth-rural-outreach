@@ -1765,26 +1765,82 @@ let currentStage = "payment";
     }
   }
 
-  function showContinueRegistration() {
-    const reference =
-      window.prompt(
-        "Enter your pending CMDA reference:",
-        ""
-      );
+  async function showContinueRegistration() {
+    const savedReference =
+      getSavedReference();
 
-    if (!reference || !reference.trim()) {
+    if (savedReference) {
+      currentReference =
+        savedReference.trim().toUpperCase();
+
+      try {
+        await loadRegistrationStatus(
+          currentReference,
+          true
+        );
+        return;
+      } catch (error) {
+        console.error(
+          "Saved registration could not be restored:",
+          error
+        );
+      }
+    }
+
+    const email = window.prompt(
+      "Enter the email address you used for your registration:"
+    );
+
+    if (!email || !email.trim()) {
       return;
     }
 
-    const cleanReference =
-      reference.trim().toUpperCase();
+    try {
+      const response = await fetch(
+        "/api/registration-recovery?email=" +
+          encodeURIComponent(
+            email.trim().toLowerCase()
+          ),
+        {
+          headers: {
+            Accept: "application/json"
+          },
+          cache: "no-store"
+        }
+      );
 
-    currentReference = cleanReference;
+      const data =
+        await response.json();
 
-    loadRegistrationStatus(
-      cleanReference,
-      true
-    );
+      if (
+        !response.ok ||
+        !data.success ||
+        !data.reference
+      ) {
+        throw new Error(
+          data.message ||
+          "No registration was found with that email address."
+        );
+      }
+
+      saveReference(data.reference);
+
+      await loadRegistrationStatus(
+        data.reference,
+        true
+      );
+
+    } catch (error) {
+      console.error(
+        "Registration recovery error:",
+        error
+      );
+
+      alert(
+        error.message ||
+        "Unable to recover your registration."
+      );
+    }
   }
 
   function attachLandingButtons() {
