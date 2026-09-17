@@ -88,6 +88,13 @@ function fromDatabase(row) {
     paymentChannel: row.payment_channel,
     paystackTransactionId: row.paystack_transaction_id,
     paymentTransactionAt: row.payment_transaction_at || null,
+
+    receiptPath: row.receipt_path || null,
+    receiptUploadedAt: row.receipt_uploaded_at || null,
+    rejectionReason: row.rejection_reason || null,
+    verifiedAt: row.verified_at || null,
+    verifiedBy: row.verified_by || null,
+
     createdAt: row.created_at,
     paidAt: row.paid_at
   };
@@ -197,7 +204,9 @@ async function getRegistrationSettings() {
       accountNumber: process.env.PAYMENT_ACCOUNT_NUMBER || "",
       instructions:
         process.env.PAYMENT_INSTRUCTIONS ||
-        "Please pay the registration fee and upload your receipt for verification."
+        "Please pay the registration fee and upload your receipt for verification.",
+      whatsappGroupLink:
+        process.env.WHATSAPP_GROUP_LINK || ""
     }
   };
 
@@ -536,7 +545,24 @@ async function findByReference(reference) {
     throw error;
   }
 
-  return fromDatabase(data);
+  if (data) {
+    return fromDatabase(data);
+  }
+
+  // Fallback: allow callers to resolve a registration
+  // directly by its database ID as well.
+  const { data: byId, error: idError } = await client
+    .from("registrations")
+    .select("*")
+    .eq("id", cleanReference)
+    .limit(1)
+    .maybeSingle();
+
+  if (idError) {
+    throw idError;
+  }
+
+  return fromDatabase(byId);
 }
 
 async function updateRegistration(id, updates) {

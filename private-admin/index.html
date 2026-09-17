@@ -307,6 +307,39 @@ main{max-width:1150px;margin:auto;padding:22px 16px 60px}
   </div>
 </section>
 
+<section id="participantDetailsPage" class="hidden">
+  <header>
+    <div class="head">
+      <div>
+        <h1 id="participantDetailsTitle">Participant Details</h1>
+        <p>Registration information</p>
+      </div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button
+          id="backToParticipants"
+          class="btn secondary"
+          type="button"
+        >
+          Back to Participants
+        </button>
+
+        <button
+          id="backToDashboardFromDetails"
+          class="btn secondary"
+          type="button"
+        >
+          Back to Dashboard
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div id="participantDetails"></div>
+  </main>
+</section>
+
 <section id="participantsPage" class="hidden">
   <header>
     <div class="head">
@@ -787,9 +820,7 @@ $("openFinance").addEventListener("click",openFinancePage);
 $("openSettings").addEventListener("click",()=>showAdminPage("settings"));
 $("backFromFinance").addEventListener("click",backFromFinance);
 
-});
-
-  $("backFromSettings").addEventListener("click",()=>showAdminPage("home"));
+$("backFromSettings").addEventListener("click",()=>showAdminPage("home"));
 $("saveRegistrationSettings").addEventListener("click",saveRegistrationSettings);
 $("resetRegistrations").addEventListener("click",async()=>{
   const confirmed = confirm(
@@ -825,41 +856,137 @@ $("logout").addEventListener("click",async()=>{
 
 start();
 function openParticipantsPage(name,members){
- $("dashboard").classList.add("hidden");
- $("participantsPage").classList.remove("hidden");
+  $("dashboardHome").classList.add("hidden");
+  $("registrationSettings").classList.add("hidden");
+  $("financePage").classList.add("hidden");
+  $("participantDetailsPage").classList.add("hidden");
 
- $("participantsPageTitle").textContent=name+" Participants";
+  $("dashboard").classList.remove("hidden");
+  $("participantsPage").classList.remove("hidden");
 
- const list=$("participantList");
+  $("participantsPageTitle").textContent =
+    name + " Participants";
 
- if(!Array.isArray(members) || !members.length){
-  list.innerHTML=
-   '<div class="card">'+
-   '<p style="margin:0;color:#777">No participants registered in this unit yet.</p>'+
-   '</div>';
-  return;
- }
+  const list = $("participantList");
 
- list.innerHTML=members.map((m,i)=>`
-  <div class="card" style="margin-bottom:14px">
-   <div style="font-size:17px;font-weight:800;color:#5b1730;margin-bottom:12px">
-    ${esc(m.name || m.fullName || "Participant "+(i+1))}
-   </div>
+  if(!Array.isArray(members) || !members.length){
+    list.innerHTML =
+      '<div class="card">' +
+        '<p style="margin:0;color:#777">' +
+          'No participants registered in this unit yet.' +
+        '</p>' +
+      '</div>';
 
-   <div style="display:grid;gap:8px;color:#66565e;font-size:14px">
-    <div><strong>Registration ID:</strong> ${esc(m.reference || "—")}</div>
-    <div><strong>Department:</strong> ${esc(m.department || "—")}</div>
-    <div><strong>Level:</strong> ${esc(m.level || "—")}</div>
-    <div><strong>Email:</strong> ${esc(m.email || "—")}</div>
-    <div><strong>Phone:</strong> ${esc(m.phone || "—")}</div>
-   </div>
-  </div>
- `).join("");
+    return;
+  }
+
+  list.innerHTML = members.map((m,i)=>`
+    <button
+      type="button"
+      class="card participant-detail-card"
+      data-participant-index="${i}"
+      style="width:100%;text-align:left;border:0;cursor:pointer;margin-bottom:14px"
+    >
+      <div style="font-size:17px;font-weight:800;color:#5b1730;margin-bottom:12px">
+        ${esc(m.name || m.fullName || "Participant "+(i+1))}
+      </div>
+
+      <div style="display:grid;gap:8px;color:#66565e;font-size:14px">
+        <div><strong>Registration ID:</strong> ${esc(m.reference || "—")}</div>
+        <div><strong>Department:</strong> ${esc(m.department || "—")}</div>
+        <div><strong>Level:</strong> ${esc(m.level || "—")}</div>
+      </div>
+
+      <div style="margin-top:12px;color:#8a2348;font-weight:700">
+        View participant details →
+      </div>
+    </button>
+  `).join("");
+
+  document
+    .querySelectorAll(".participant-detail-card")
+    .forEach(card=>{
+      card.addEventListener("click",()=>{
+        const index =
+          Number(card.dataset.participantIndex);
+
+        openParticipantDetails(
+          name,
+          members[index]
+        );
+      });
+    });
 }
 
+function openParticipantDetails(unit,participant){
+  $("participantsPage").classList.add("hidden");
+  $("participantDetailsPage").classList.remove("hidden");
+
+  $("participantDetailsTitle").textContent =
+    participant.name ||
+    participant.fullName ||
+    "Participant Details";
+
+  $("participantDetails").innerHTML = `
+    <div class="card">
+      <div style="font-size:21px;font-weight:800;color:#5b1730;margin-bottom:18px">
+        ${esc(participant.name || participant.fullName || "Participant")}
+      </div>
+
+      <div style="display:grid;gap:12px;color:#66565e;font-size:15px">
+        <div>
+          <strong>Registration ID:</strong>
+          ${esc(participant.reference || "—")}
+        </div>
+
+        <div>
+          <strong>Unit:</strong>
+          ${esc(unit || "—")}
+        </div>
+
+        <div>
+          <strong>Department:</strong>
+          ${esc(participant.department || "—")}
+        </div>
+
+        <div>
+          <strong>Level:</strong>
+          ${esc(participant.level || "—")}
+        </div>
+
+        <div>
+          <strong>Email:</strong>
+          ${esc(participant.email || "—")}
+        </div>
+
+        <div>
+          <strong>Phone:</strong>
+          ${esc(participant.phone || "—")}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+$("backToParticipants").addEventListener("click",()=>{
+  $("participantDetailsPage").classList.add("hidden");
+  $("participantsPage").classList.remove("hidden");
+});
+
+$("backToDashboardFromDetails").addEventListener("click",()=>{
+  $("participantDetailsPage").classList.add("hidden");
+  $("participantsPage").classList.add("hidden");
+  $("dashboard").classList.remove("hidden");
+  showAdminPage("home");
+  loadStats();
+});
+
 $("backToDashboard").addEventListener("click",()=>{
- $("participantsPage").classList.add("hidden");
- $("dashboard").classList.remove("hidden");
+  $("participantsPage").classList.add("hidden");
+  $("participantDetailsPage").classList.add("hidden");
+  $("dashboard").classList.remove("hidden");
+  showAdminPage("home");
+  loadStats();
 });
 
 </script>

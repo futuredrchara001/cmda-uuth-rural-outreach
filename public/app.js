@@ -144,16 +144,24 @@ let currentStage = "payment";
 
   function getMainContainer() {
     return (
-      $("#registrationView") ||
-      $(".registration") ||
-      document.querySelector(
-        "main"
-      ) ||
+      document.querySelector("main") ||
       document.body
     );
   }
 
   function hideRegistrationForm() {
+    const registrationSection =
+      $("#registration") ||
+      document.querySelector(".registration");
+
+    if (registrationSection) {
+      registrationSection.style.display = "none";
+    }
+
+    const registrationHeading = $(".section-heading");
+    if (registrationHeading) {
+      registrationHeading.style.display = "none";
+    }
     if (registrationForm) {
       registrationForm.style.display =
         "none";
@@ -176,17 +184,27 @@ let currentStage = "payment";
   }
 
   function showRegistrationForm() {
+    const registrationHeading = $(".section-heading");
+    if (registrationHeading) {
+      registrationHeading.style.display = "";
+    }
+    const registrationSection =
+      $("#registration") ||
+      document.querySelector(".registration");
+
+    if (registrationSection) {
+      registrationSection.style.display = "";
+    }
+
     if (registrationForm) {
-      registrationForm.style.display =
-        "";
+      registrationForm.style.display = "";
     }
 
     const paymentPreview =
       $(".payment-preview");
 
     if (paymentPreview) {
-      paymentPreview.style.display =
-        "";
+      paymentPreview.style.display = "";
     }
 
     const intro =
@@ -201,7 +219,7 @@ let currentStage = "payment";
 
     if (statusView) {
       statusView.innerHTML = "";
-      statusView.style.display = "";
+      statusView.style.display = "none";
     }
   }
 
@@ -309,26 +327,19 @@ let currentStage = "payment";
     `;
   }
 
-  function renderReferenceCard(
-    registration
-  ) {
-    const isSuccessful =
-      registration.paymentStatus === "success";
-
+  function renderReferenceCard(registration) {
     const reference =
-      isSuccessful
-        ? (registration.reference || "")
-        : (
-            registration.pendingReference ||
-            registration.reference ||
-            ""
-          );
+      registration.reference || "";
+
+    if (!reference) {
+      return "";
+    }
 
     return `
       <div class="reference-card">
         <div>
           <span class="reference-label">
-            ${registration.paymentStatus === "success" ? "Registration Reference" : "Pending CMDA Reference"}
+            Registration Reference
           </span>
 
           <strong>
@@ -424,11 +435,6 @@ let currentStage = "payment";
 
         <div class="payment-details">
           <div class="payment-row">
-            <span>Payment Method</span>
-            <strong>${escapeHtml(payment.method)}</strong>
-          </div>
-
-          <div class="payment-row">
             <span>Account Name</span>
             <strong>${escapeHtml(payment.accountName || "—")}</strong>
           </div>
@@ -452,6 +458,11 @@ let currentStage = "payment";
               }
             </div>
           </div>
+
+          <div class="payment-row">
+            <span>Bank</span>
+            <strong>${escapeHtml(payment.bankName || "OPay")}</strong>
+          </div>
         </div>
 
         <div class="payment-instructions">
@@ -473,7 +484,7 @@ let currentStage = "payment";
         "status-pending"
       )}
 
-      ${renderProgress("pending")}
+      
 
       <div class="status-section">
         <h3>Payment Instructions</h3>
@@ -514,10 +525,7 @@ let currentStage = "payment";
         "Submit your payment receipt for Finance verification.",
         "status-receipt-upload"
       )}
-
-      ${renderReferenceCard(registration)}
-
-      ${renderProgress("receipt_upload")}
+      
 
       <div class="receipt-upload-card">
         <div class="receipt-heading">
@@ -526,13 +534,27 @@ let currentStage = "payment";
             <p>
               Upload the receipt for the payment you have just made.
             </p>
-            <p class="receipt-limit-note">
-              Accepted: JPG, PNG, WEBP or PDF · Maximum size: 5 MB
-            </p>
           </div>
         </div>
 
         <div class="receipt-transaction-fields">
+          <label
+            for="paymentAccountName"
+            class="receipt-field-label"
+          >
+            Account name used for payment
+            <span aria-hidden="true">*</span>
+          </label>
+
+          <input
+            type="text"
+            id="paymentAccountName"
+            class="receipt-account-name-input"
+            placeholder="Enter the name on the account used to pay"
+            autocomplete="name"
+            required
+          />
+
           <label
             for="paymentTransactionDate"
             class="receipt-field-label"
@@ -561,6 +583,14 @@ let currentStage = "payment";
             class="receipt-time-input"
           />
         </div>
+
+        <p class="receipt-limit-note">
+          Accepted: JPG, PNG, WEBP or PDF · Maximum size: 5 MB
+        </p>
+
+        <p class="receipt-limit-note">
+          Accepted: JPG, PNG, WEBP or PDF · Maximum size: 5 MB
+        </p>
 
         <label
           class="receipt-file-label"
@@ -598,6 +628,7 @@ let currentStage = "payment";
           Please submit only the receipt for this registration.
         </p>
       </div>
+      ${renderBackToHome()}
     `;
   }
 
@@ -611,15 +642,7 @@ let currentStage = "payment";
         "Your payment receipt has been received and is being reviewed by our Finance team. Please don't submit the form again. Your registration is safely recorded. We'll update this page automatically once your payment has been verified.",
         "status-receipt-submitted"
       )}
-
-        ${renderReferenceCard(
-          registration
-        )}
-
-        ${renderProgress(
-          "receipt_submitted"
-        )}
-
+ 
         <div class="verification-message">
           <div class="verification-icon">
             <span></span>
@@ -636,11 +659,6 @@ let currentStage = "payment";
             </p>
           </div>
         </div>
-
-        ${renderPaymentDetails(
-          payment
-        )}
-
         <div class="patience-box">
           <strong>
             Please be patient
@@ -663,6 +681,7 @@ let currentStage = "payment";
         </div>
 
       </div>
+      ${renderBackToHome()}
     `;
   }
 
@@ -710,6 +729,23 @@ let currentStage = "payment";
           </div>
 
           <div class="receipt-transaction-fields">
+            <label
+              for="paymentAccountName"
+              class="receipt-field-label"
+            >
+              Account name used for payment
+              <span aria-hidden="true">*</span>
+            </label>
+
+            <input
+              type="text"
+              id="paymentAccountName"
+              class="receipt-account-name-input"
+              placeholder="Enter the name on the account used to pay"
+              autocomplete="name"
+              required
+            />
+
             <label
               for="paymentTransactionDate"
               class="receipt-field-label"
@@ -782,6 +818,7 @@ let currentStage = "payment";
         </div>
 
       </div>
+      ${renderBackToHome()}
     `;
   }
 
@@ -804,10 +841,7 @@ let currentStage = "payment";
           registration
         )}
 
-        ${renderProgress(
-          "success"
-        )}
-
+ 
         <div class="success-confirmation">
 
           <div class="success-mark">
@@ -908,6 +942,7 @@ let currentStage = "payment";
         </div>
 
       </div>
+      ${renderBackToHome()}
     `;
   }
 
@@ -917,7 +952,37 @@ let currentStage = "payment";
   ======================================================
   */
 
+  function renderBackToHome() {
+    return `
+      <div class="back-home-wrap">
+        <button
+          type="button"
+          class="back-home-button"
+          id="backHomeButton"
+          aria-label="Return to the CMDA-UUTH Rural Outreach home page"
+        >
+          <span class="back-home-arrow" aria-hidden="true">←</span>
+          <span>Back to Home</span>
+        </button>
+      </div>
+    `;
+  }
+
   function attachStatusEvents() {
+
+    const backHomeButton =
+      document.getElementById("backHomeButton");
+
+    if (backHomeButton) {
+      backHomeButton.addEventListener(
+        "click",
+        (event) => {
+          event.preventDefault();
+          window.location.assign("/");
+        }
+      );
+    }
+
     document
       .querySelectorAll(
         "[data-copy]"
@@ -1195,10 +1260,18 @@ let currentStage = "payment";
   */
 
   async function submitReceipt() {
+    const accountNameInput =
+      $("#paymentAccountName");
+
     const transactionDateInput =
       $("#paymentTransactionDate");
     const transactionTimeInput =
       $("#paymentTransactionTime");
+
+    const accountName =
+      accountNameInput
+        ? accountNameInput.value.trim()
+        : "";
 
     const transactionDate =
       transactionDateInput
@@ -1209,6 +1282,25 @@ let currentStage = "payment";
       transactionTimeInput
         ? transactionTimeInput.value.trim()
         : "";
+
+    if (!accountName) {
+      const messageBox =
+        $("#receiptUploadMessage");
+
+      if (messageBox) {
+        messageBox.className =
+          "upload-message error";
+
+        messageBox.textContent =
+          "Please enter the account name used for the payment.";
+      }
+
+      if (accountNameInput) {
+        accountNameInput.focus();
+      }
+
+      return;
+    }
 
     if (!transactionDate) {
       const messageBox =
@@ -1328,6 +1420,11 @@ let currentStage = "payment";
     formData.append(
       "reference",
       reference
+    );
+
+    formData.append(
+      "accountName",
+      accountName
     );
 
     formData.append(
@@ -1723,171 +1820,6 @@ let currentStage = "payment";
 
   /*
   ======================================================
-  LANDING PAGE NAVIGATION
-  ======================================================
-  */
-
-  function showLandingPage() {
-    const landing = document.querySelector("#landingPage");
-    const registration = document.querySelector("#registration");
-    const statusView = document.querySelector("#registrationStatusView");
-
-    if (landing) landing.style.display = "";
-    if (registration) registration.style.display = "none";
-
-    if (statusView) {
-      statusView.innerHTML = "";
-      statusView.style.display = "none";
-    }
-
-    stopStatusPolling();
-    currentReference = null;
-    currentStatusData = null;
-    currentStage = "payment";
-  }
-
-  function showFreshRegistration() {
-    clearSavedReference();
-    stopStatusPolling();
-
-    currentStatusData = null;
-    currentStage = "payment";
-
-    if (registrationForm) {
-      registrationForm.reset();
-      registrationForm.style.display = "";
-    }
-
-    const landing = document.querySelector("#landingPage");
-    if (landing) landing.style.display = "none";
-
-    const statusView = document.querySelector("#registrationStatusView");
-    if (statusView) {
-      statusView.innerHTML = "";
-      statusView.style.display = "none";
-    }
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth"
-    });
-
-    if (registrationForm) {
-      registrationForm.scrollIntoView({
-        behavior: "smooth",
-        block: "start"
-      });
-    }
-  }
-
-  async function showContinueRegistration() {
-    const savedReference =
-      getSavedReference();
-
-    if (savedReference) {
-      currentReference =
-        savedReference.trim().toUpperCase();
-
-      try {
-        await loadRegistrationStatus(
-          currentReference,
-          true
-        );
-        return;
-      } catch (error) {
-        console.error(
-          "Saved registration could not be restored:",
-          error
-        );
-      }
-    }
-
-    const email = window.prompt(
-      "Enter the email address you used for your registration:"
-    );
-
-    if (!email || !email.trim()) {
-      return;
-    }
-
-    try {
-      const response = await fetch(
-        "/api/registration-recovery?email=" +
-          encodeURIComponent(
-            email.trim().toLowerCase()
-          ),
-        {
-          headers: {
-            Accept: "application/json"
-          },
-          cache: "no-store"
-        }
-      );
-
-      const data =
-        await response.json();
-
-      if (
-        !response.ok ||
-        !data.success ||
-        !data.reference
-      ) {
-        throw new Error(
-          data.message ||
-          "No registration was found with that email address."
-        );
-      }
-
-      saveReference(data.reference);
-
-      await loadRegistrationStatus(
-        data.reference,
-        true
-      );
-
-    } catch (error) {
-      console.error(
-        "Registration recovery error:",
-        error
-      );
-
-      alert(
-        error.message ||
-        "Unable to recover your registration."
-      );
-    }
-  }
-
-  function attachLandingButtons() {
-    const beginButton =
-      document.querySelector("#beginRegistration");
-
-    const continueButton =
-      document.querySelector("#continueRegistration");
-
-    if (beginButton) {
-      beginButton.addEventListener(
-        "click",
-        (event) => {
-          event.preventDefault();
-          showFreshRegistration();
-        }
-      );
-    }
-
-    if (continueButton) {
-      continueButton.addEventListener(
-        "click",
-        (event) => {
-          event.preventDefault();
-          showContinueRegistration();
-        }
-      );
-    }
-  }
-
-  /*
-  ======================================================
   INITIALISE
   ======================================================
   */
@@ -1898,15 +1830,6 @@ let currentStage = "payment";
         "submit",
         handleRegistrationSubmit
       );
-    }
-
-    attachLandingButtons();
-
-    const landing =
-      document.querySelector("#landingPage");
-
-    if (landing) {
-      showLandingPage();
     }
 
     const params =
@@ -1921,7 +1844,16 @@ let currentStage = "payment";
         .trim()
         .toUpperCase();
 
+    const startRegistration =
+      params.get("start") === "1";
+
+    if (!reference && !startRegistration) {
+      window.location.replace("/");
+      return;
+    }
+
     if (reference) {
+      hideRegistrationForm();
       saveReference(reference);
 
       try {

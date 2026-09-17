@@ -147,6 +147,12 @@ const BREVO_SENDER_NAME =
   process.env.BREVO_SENDER_NAME ||
   "CMDA-UUTH Rural Outreach";
 
+const ADMIN_DASHBOARD_URL =
+  `${(process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "")}/admin`;
+
+const PUBLIC_WEBSITE_URL =
+  `${(process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "")}/`;
+
 async function sendBrevoEmail({
   to,
   subject,
@@ -182,7 +188,7 @@ async function sendBrevoEmail({
           email
         })),
         subject,
-        text
+        textContent: text
       },
       {
         headers: {
@@ -271,6 +277,9 @@ Registration Fee: ₦${REGISTRATION_AMOUNT.toLocaleString()}
 Payment Status: RECEIPT SUBMITTED
 
 Please log in to the Finance/Admin dashboard to review the receipt and verify the actual payment.
+
+Admin Dashboard:
+${ADMIN_DASHBOARD_URL}
 `
   });
 }
@@ -319,6 +328,9 @@ Your payment has been manually verified by the Finance Administrator, and your r
 WhatsApp Group:
 ${whatsappLink}
 
+Public Website:
+${PUBLIC_WEBSITE_URL}
+
 Please keep this email for your records.
 
 Thank you,
@@ -348,6 +360,9 @@ Registration Fee: ₦${REGISTRATION_AMOUNT.toLocaleString()}
 Payment Status: VERIFIED
 Verified At: ${registration.verifiedAt || new Date().toISOString()}
 Verified By: ${registration.verifiedBy || "Finance Administrator"}
+
+Admin Dashboard:
+${ADMIN_DASHBOARD_URL}
 `;
 
   await Promise.all([
@@ -399,6 +414,9 @@ ${reason}
 Please review the payment details and follow the instructions on the registration status page to take the required action.
 
 Your registration is not confirmed at this stage.
+
+Public Website:
+${PUBLIC_WEBSITE_URL}
 
 Thank you,
 CMDA-UUTH Chapter
@@ -879,7 +897,10 @@ app.get("/api/admin/pending-verifications", requireAdmin, async (req, res) => {
       if (!grouped[unit]) grouped[unit] = [];
 
       grouped[unit].push({
-        reference: registration.reference,
+        reference:
+          registration.reference ||
+          registration.pendingReference ||
+          null,
         fullName: registration.fullName,
         accountName: registration.accountName || null,
         email: registration.email,
@@ -1054,12 +1075,39 @@ app.post("/api/admin/registrations/:reference/reject", requireAdmin, async (req,
       });
     }
 
-    const updated = await updateRegistration(registration.id, {
-      paymentStatus: "rejected",
-      rejectionReason: reason,
-      verifiedAt: null,
-      verifiedBy: null
-    });
+    const oldReceiptPath =
+      registration.receiptPath || null;
+
+    if (oldReceiptPath) {
+      const { error: deleteError } =
+        await getSupabaseClient()
+          .storage
+          .from(RECEIPT_BUCKET)
+          .remove([oldReceiptPath]);
+
+      if (deleteError) {
+        console.error(
+          "Rejected receipt deletion error:",
+          deleteError.message
+        );
+
+        return res.status(500).json({
+          success: false,
+          message:
+            "Unable to delete the existing receipt. The payment was not rejected. Please try again."
+        });
+      }
+    }
+
+    const updated =
+      await updateRegistration(registration.id, {
+        paymentStatus: "rejected",
+        rejectionReason: reason,
+        verifiedAt: null,
+        verifiedBy: null,
+        receiptPath: null,
+        receiptUploadedAt: null
+      });
 
     await sendPaymentRejectedEmail(updated);
 
@@ -1390,6 +1438,9 @@ app.post(
       const reference =
         String(req.body.reference || "").trim();
 
+      const accountName =
+        String(req.body.accountName || "").trim();
+
       const paymentTransactionDate =
         String(
           req.body.paymentTransactionDate || ""
@@ -1399,6 +1450,14 @@ app.post(
         String(
           req.body.paymentTransactionTime || ""
         ).trim();
+
+      if (!accountName) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Account name used for payment is required."
+        });
+      }
 
       if (!paymentTransactionDate) {
         return res.status(400).json({
@@ -1509,6 +1568,9 @@ app.post(
 
             receiptUploadedAt:
               new Date().toISOString(),
+
+            accountName:
+              accountName,
 
             paymentTransactionAt:
               paymentTransactionAt,

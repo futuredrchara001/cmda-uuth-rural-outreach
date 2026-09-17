@@ -80,17 +80,8 @@ async function beginRegistration() {
       );
     }
 
-    if (wakeScreen) {
-      wakeScreen.classList.add("active");
-    }
-
-    document.body.style.overflow =
-      "hidden";
-
-    setTimeout(() => {
-      window.location.href =
-        "/registration/#registration";
-    }, 700);
+    window.location.href =
+      "/registration/?start=1#registration";
 
   } catch (error) {
     openingRegistration = false;
@@ -106,84 +97,22 @@ async function beginRegistration() {
 async function continueRegistration() {
   if (openingRegistration) return;
 
+  const reference = getSavedReference();
+
+  if (!reference) {
+    alert(
+      "No saved registration was found on this device. Please open the registration on the same device and browser you originally used."
+    );
+    return;
+  }
+
   openingRegistration = true;
   lockButtons(true);
 
-  try {
-    let reference =
-      getSavedReference();
-
-    if (!reference) {
-      const email =
-        window.prompt(
-          "Enter the email address you used for your registration:"
-        );
-
-      if (
-        !email ||
-        !email.trim()
-      ) {
-        openingRegistration = false;
-        lockButtons(false);
-        return;
-      }
-
-      const response =
-        await fetch(
-          "/api/registration-recovery?email=" +
-          encodeURIComponent(
-            email.trim().toLowerCase()
-          ),
-          {
-            headers: {
-              Accept:
-                "application/json"
-            },
-            cache: "no-store"
-          }
-        );
-
-      const data =
-        await response.json();
-
-      if (
-        !response.ok ||
-        !data.success ||
-        !data.reference
-      ) {
-        throw new Error(
-          data.message ||
-          "No registration was found with that email address."
-        );
-      }
-
-      reference =
-        String(data.reference)
-          .trim()
-          .toUpperCase();
-
-      saveReference(reference);
-    }
-
-    window.location.href =
-      "/registration/?reference=" +
-      encodeURIComponent(reference) +
-      "#registration";
-
-  } catch (error) {
-    console.error(
-      "Registration recovery error:",
-      error
-    );
-
-    openingRegistration = false;
-    lockButtons(false);
-
-    alert(
-      error.message ||
-      "Unable to recover your registration."
-    );
-  }
+  window.location.href =
+    "/registration/?reference=" +
+    encodeURIComponent(reference) +
+    "#registration";
 }
 
 if (beginButton) {
