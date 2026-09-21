@@ -907,6 +907,7 @@ app.get("/api/admin/pending-verifications", requireAdmin, async (req, res) => {
         accountName: registration.accountName || null,
         email: registration.email,
         phone: registration.phone,
+        whatsappProfileName: registration.whatsappProfileName || "",
         department: registration.department,
         level: registration.level,
         amount: registration.amount,
