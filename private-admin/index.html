@@ -704,6 +704,7 @@ function renderReceipts(units){
               <div class="meta">
                 Ref: ${esc(r.reference)}<br>
                 Unit: ${esc(r.unit || unit)}<br>
+                WhatsApp Profile Name: ${esc(r.whatsappProfileName || "Not supplied")}<br>
                 Payer Account Name: ${esc(r.accountName || "Not supplied")}<br>
                 Transaction Date: ${esc(r.paymentTransactionAt ? String(r.paymentTransactionAt).split("T")[0] : "Not supplied")}<br>
                 Transaction Time: ${esc(r.paymentTransactionAt && String(r.paymentTransactionAt).includes("T") ? String(r.paymentTransactionAt).split("T")[1].slice(0,5) : "Not supplied")}
@@ -962,6 +963,11 @@ function openParticipantDetails(unit,participant){
         <div>
           <strong>Phone:</strong>
           ${esc(participant.phone || "—")}
+        </div>
+
+        <div>
+          <strong>WhatsApp Profile Name:</strong>
+          ${esc(participant.whatsappProfileName || "—")}
         </div>
       </div>
     </div>

@@ -902,6 +902,8 @@ app.get("/api/admin/pending-verifications", requireAdmin, async (req, res) => {
           registration.pendingReference ||
           null,
         fullName: registration.fullName,
+        whatsappProfileName:
+          registration.whatsappProfileName || "",
         accountName: registration.accountName || null,
         email: registration.email,
         phone: registration.phone,
@@ -1677,6 +1679,7 @@ app.put("/api/registration/:reference", async (req, res) => {
     const {
       fullName,
       phone,
+      whatsappProfileName,
       email,
       gender,
       institution,
@@ -1691,6 +1694,7 @@ app.put("/api/registration/:reference", async (req, res) => {
     if (
       !fullName ||
       !phone ||
+      !whatsappProfileName ||
       !email ||
       !gender ||
       !institution ||
@@ -1711,6 +1715,7 @@ app.put("/api/registration/:reference", async (req, res) => {
       await updateRegistration(registration.id, {
         fullName: String(fullName).trim(),
         phone: String(phone).trim(),
+        whatsappProfileName: String(whatsappProfileName).trim(),
         email: String(email).trim().toLowerCase(),
         gender,
         institution: String(institution).trim(),
@@ -1782,6 +1787,7 @@ app.post("/api/register", async (req, res) => {
     const {
       fullName,
       phone,
+      whatsappProfileName,
       email,
       gender,
       institution,
@@ -1802,6 +1808,7 @@ app.post("/api/register", async (req, res) => {
     if (
       !fullName ||
       !phone ||
+      !whatsappProfileName ||
       !email ||
       !gender ||
       !institution ||
@@ -1887,6 +1894,7 @@ app.post("/api/register", async (req, res) => {
 
       fullName: fullName.trim(),
       phone: phone.trim(),
+      whatsappProfileName: whatsappProfileName.trim(),
       email: email.trim().toLowerCase(),
 
       gender,

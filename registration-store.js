@@ -69,6 +69,7 @@ function fromDatabase(row) {
     accountName: row.account_name || null,
     fullName: row.full_name,
     phone: row.phone,
+    whatsappProfileName: row.whatsapp_profile_name || "",
     email: row.email,
     gender: row.gender,
     institution: row.institution,
@@ -109,6 +110,8 @@ function toDatabase(registration) {
     account_name: registration.accountName || null,
     full_name: registration.fullName,
     phone: registration.phone,
+    whatsapp_profile_name:
+      registration.whatsappProfileName || "",
     email: registration.email,
     gender: registration.gender,
     institution: registration.institution,
@@ -171,7 +174,7 @@ async function getSuccessfulRegistrations() {
 
   const { data, error } = await client
     .from("registrations")
-    .select("reference,full_name,unit,department,current_level,email,phone")
+    .select("reference,full_name,unit,department,current_level,email,phone,whatsapp_profile_name")
     .eq("payment_status", "success");
 
   if (error) {
