@@ -1730,20 +1730,12 @@ let currentStage = "payment";
       getSavedReference();
 
     if (!savedReference) {
-      return;
+      return false;
     }
 
     currentReference =
       savedReference;
 
-    /*
-    A saved registration is remembered for convenience,
-    but the landing-page Begin Registration button must
-    always open the participant details form.
-
-    We load the saved data silently so the participant can
-    continue editing the SAME registration.
-    */
     try {
       const response =
         await fetch(
@@ -1762,19 +1754,74 @@ let currentStage = "payment";
         await response.json();
 
       if (!response.ok || !data.success) {
-        return;
+        clearSavedReference();
+        return false;
       }
 
       currentStatusData = data;
 
+      const status =
+        data.registration?.paymentStatus ||
+        "pending";
+
+      /*
+      Once a receipt has been submitted, the
+      participant stays on the status page until
+      Finance makes a decision.
+      */
+      if (
+        status === "receipt_submitted" ||
+        status === "success"
+      ) {
+        hideRegistrationForm();
+
+        renderStatusView(
+          data,
+          false
+        );
+
+        startStatusPolling();
+
+        return true;
+      }
+
+      /*
+      A rejected payment returns the participant
+      to the status page so they can see the reason
+      and follow the replacement-receipt flow.
+      */
+      if (status === "rejected") {
+        hideRegistrationForm();
+
+        renderStatusView(
+          data,
+          false
+        );
+
+        startStatusPolling();
+
+        return true;
+      }
+
+      /*
+      No receipt has been submitted yet.
+      Restore the saved registration into the form
+      so the participant can continue from where
+      they stopped.
+      */
       populateRegistrationForm(
         data.registration || {}
       );
+
+      return true;
+
     } catch (error) {
       console.error(
-        "Saved registration preload error:",
+        "Saved registration restore error:",
         error
       );
+
+      return false;
     }
   }
 
@@ -1792,6 +1839,7 @@ let currentStage = "payment";
     const fields = [
       "fullName",
       "phone",
+      "whatsappProfileName",
       "email",
       "gender",
       "institution",
@@ -1848,6 +1896,13 @@ let currentStage = "payment";
       params.get("start") === "1";
 
     if (!reference && !startRegistration) {
+      const restored =
+        await checkSavedRegistration();
+
+      if (restored) {
+        return;
+      }
+
       window.location.replace("/");
       return;
     }
