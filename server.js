@@ -1316,7 +1316,9 @@ app.get("/api/admin/stats", requireAdmin, async (req, res) => {
           department: registration.department,
           level: registration.level,
           email: registration.email,
-          phone: registration.phone
+          phone: registration.phone,
+          whatsappProfileName:
+            registration.whatsappProfileName || ""
         }))
       };
     }
