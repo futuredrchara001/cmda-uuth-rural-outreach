@@ -176,40 +176,57 @@ async function sendBrevoEmail({
     return false;
   }
 
-  try {
-    await axios.post(
-      BREVO_API_URL,
-      {
-        sender: {
-          name: BREVO_SENDER_NAME,
-          email: BREVO_SENDER_EMAIL
+  const maxAttempts = 3;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await axios.post(
+        BREVO_API_URL,
+        {
+          sender: {
+            name: BREVO_SENDER_NAME,
+            email: BREVO_SENDER_EMAIL
+          },
+          to: recipients.map(email => ({
+            email
+          })),
+          subject,
+          textContent: text
         },
-        to: recipients.map(email => ({
-          email
-        })),
-        subject,
-        textContent: text
-      },
-      {
-        headers: {
-          "accept": "application/json",
-          "api-key": process.env.BREVO_API_KEY,
-          "content-type": "application/json"
+        {
+          headers: {
+            "accept": "application/json",
+            "api-key": process.env.BREVO_API_KEY,
+            "content-type": "application/json"
+          }
         }
+      );
+
+      console.log(
+        `Brevo email accepted on attempt ${attempt}: ${subject}`
+      );
+
+      return true;
+    } catch (error) {
+      console.error(
+        `Brevo email attempt ${attempt}/${maxAttempts} failed:`,
+        error.response?.data || error.message
+      );
+
+      if (attempt < maxAttempts) {
+        await new Promise(resolve =>
+          setTimeout(resolve, 1500 * attempt)
+        );
       }
-    );
-
-    return true;
-  } catch (error) {
-    console.error(
-      "Brevo email error:",
-      error.response?.data || error.message
-    );
-
-    return false;
+    }
   }
-}
 
+  console.error(
+    `Brevo email permanently failed after ${maxAttempts} attempts: ${subject}`
+  );
+
+  return false;
+}
 /*
 ==================================================
 ADMIN EMAIL CONFIGURATION
