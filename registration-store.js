@@ -366,7 +366,6 @@ async function hasReachedUnitLimit(unit) {
   const { count, error } = await client
     .from("registrations")
     .select("id", { count: "exact", head: true })
-    .eq("payment_status", "success")
     .eq("unit", unit);
 
   if (error) throw error;
