@@ -428,6 +428,11 @@ async function getRegistrationClosureStatus() {
   const dateReached =
     !!closeAt && new Date() >= closeAt;
 
+  const unitAvailability = {};
+  for (const unit of Object.keys(settings.unitLimits || {})) {
+    unitAvailability[unit] = await hasReachedUnitLimit(unit);
+  }
+
   return {
     open:
       !overallLimit.reached &&
@@ -437,7 +442,8 @@ async function getRegistrationClosureStatus() {
       ? closeAt.toISOString()
       : null,
     overallLimit,
-    unitLimits: settings.unitLimits
+    unitLimits: settings.unitLimits,
+    unitAvailability
   };
 }
 

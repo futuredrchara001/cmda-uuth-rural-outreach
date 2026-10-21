@@ -611,8 +611,11 @@ app.get("/api/registration-status", async (req, res, next) => {
   }
 
   try {
+    const status = await getRegistrationClosureStatus();
     res.json({
-      open: (await getRegistrationClosureStatus()).open
+      open: status.open,
+      unitLimits: status.unitLimits,
+      unitAvailability: status.unitAvailability
     });
   } catch (error) {
     console.error("Registration status error:", error.message);
@@ -1889,7 +1892,7 @@ app.post("/api/register", async (req, res) => {
       return res.status(403).json({
         success: false,
         message:
-          `${unit} is already full. Please select another unit.`
+          "This unit is full. Please select another unit."
       });
     }
 

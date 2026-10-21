@@ -1872,6 +1872,64 @@ let currentStage = "payment";
   ======================================================
   */
 
+  async function refreshUnitAvailability() {
+    const unitSelect = $("#unit");
+    if (!unitSelect) return;
+
+    try {
+      const response = await fetch("/api/registration-status");
+      if (!response.ok) return;
+
+      const data = await response.json();
+      const availability = data.unitAvailability || {};
+      let selectedUnitBecameFull = false;
+
+      Array.from(unitSelect.options).forEach((option) => {
+        if (!option.value) return;
+
+        const status = availability[option.value];
+        if (!status) return;
+
+        const baseLabel =
+          option.dataset.baseLabel ||
+          option.textContent.replace(/\s+\(Full\)$/, "");
+
+        option.dataset.baseLabel = baseLabel;
+
+        const full =
+          status.reached ||
+          (status.limit != null && Number(status.remaining) <= 0);
+
+        if (full && option.selected) {
+          selectedUnitBecameFull = true;
+        }
+
+        option.disabled = full;
+        option.textContent = full
+          ? `${baseLabel} (Full)`
+          : baseLabel;
+      });
+
+      let message = $("#unitFullMessage");
+      if (!message) {
+        message = document.createElement("p");
+        message.id = "unitFullMessage";
+        message.setAttribute("role", "status");
+        message.textContent =
+          "This unit is full. Please select another unit.";
+        message.hidden = true;
+        unitSelect.insertAdjacentElement("afterend", message);
+      }
+
+      if (selectedUnitBecameFull) {
+        unitSelect.value = "";
+        message.hidden = false;
+      }
+    } catch (error) {
+      console.error("Unit availability refresh error:", error.message);
+    }
+  }
+
   async function init() {
     if (registrationForm) {
       registrationForm.addEventListener(
@@ -1879,6 +1937,8 @@ let currentStage = "payment";
         handleRegistrationSubmit
       );
     }
+    await refreshUnitAvailability();
+    setInterval(refreshUnitAvailability, POLL_INTERVAL);
 
     const params =
       new URLSearchParams(
