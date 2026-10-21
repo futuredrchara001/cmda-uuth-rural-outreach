@@ -2002,6 +2002,20 @@ app.post("/api/register", async (req, res) => {
       error.response?.data || error.message
     );
 
+    if (error.message?.includes("UNIT_CAPACITY_REACHED")) {
+      return res.status(403).json({
+        success: false,
+        message: "This unit is full. Please select another unit."
+      });
+    }
+
+    if (error.message?.includes("INVALID_REGISTRATION_UNIT")) {
+      return res.status(400).json({
+        success: false,
+        message: "Please select a valid unit."
+      });
+    }
+
     res.status(500).json({
       success: false,
       message:
