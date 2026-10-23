@@ -1223,10 +1223,22 @@ app.put("/api/admin/registration-settings", requireAdmin, async (req, res) => {
     const body = req.body || {};
 
     const settings = await updateRegistrationSettings({
-      closeAt:
-        body.closeAt === null || body.closeAt === ""
-          ? null
-          : String(body.closeAt || "").trim(),
+      closeAt: (() => {
+        const raw = String(body.closeAt || "").trim();
+
+        if (body.closeAt === null || raw === "") {
+          return null;
+        }
+
+        // Admin datetime-local values have no timezone.
+        // Interpret those values as Nigeria time (UTC+1).
+        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?$/.test(raw)) {
+          return raw + "+01:00";
+        }
+
+        // Preserve timestamps that already specify a timezone.
+        return raw;
+      })(),
 
       overallLimit: Number(body.overallLimit),
 
