@@ -1930,6 +1930,38 @@ let currentStage = "payment";
     }
   }
 
+  function renderPublicRegistrationNotice(title, message) {
+    hideRegistrationForm();
+
+    let notice = $("#registrationClosedNotice");
+    if (!notice) {
+      notice = document.createElement("section");
+      notice.id = "registrationClosedNotice";
+      notice.setAttribute("role", "status");
+      notice.style.cssText =
+        "max-width:560px;margin:24px auto;padding:18px 20px;" +
+        "border:1px solid #e6d6d9;border-radius:12px;" +
+        "background:#faf5f3;color:#561D32;text-align:center;box-sizing:border-box;";
+
+      const heading = document.createElement("p");
+      heading.id = "registrationClosedTitle";
+      heading.style.cssText =
+        "margin:0 0 8px;font-size:16px;font-weight:700;line-height:1.5;";
+
+      const body = document.createElement("p");
+      body.id = "registrationClosedMessage";
+      body.style.cssText =
+        "margin:0;font-size:14px;font-weight:700;line-height:1.7;";
+
+      notice.append(heading, body);
+      getMainContainer().appendChild(notice);
+    }
+
+    $("#registrationClosedTitle").textContent = title;
+    $("#registrationClosedMessage").textContent = message;
+    notice.style.display = "block";
+  }
+
   async function init() {
     if (registrationForm) {
       registrationForm.addEventListener(
@@ -1954,6 +1986,38 @@ let currentStage = "payment";
 
     const startRegistration =
       params.get("start") === "1";
+
+    if (!reference && startRegistration) {
+      hideRegistrationForm();
+
+      try {
+        const response = await fetch("/api/registration-status", {
+          cache: "no-store"
+        });
+
+        if (!response.ok) throw new Error("Status check failed");
+
+        const data = await response.json();
+
+        if (!data.open) {
+          renderPublicRegistrationNotice(
+            "Registration Closed",
+            "Thank you for indicating interest in CMDA-UUTH Rural Outreach 2026. Registration has officially closed."
+          );
+          return;
+        }
+
+        const notice = $("#registrationClosedNotice");
+        if (notice) notice.remove();
+        showRegistrationForm();
+      } catch (error) {
+        renderPublicRegistrationNotice(
+          "Registration temporarily unavailable",
+          "We could not verify registration status. Please try again shortly."
+        );
+        return;
+      }
+    }
 
     if (!reference && !startRegistration) {
       const restored =
